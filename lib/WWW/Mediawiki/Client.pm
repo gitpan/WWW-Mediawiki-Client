@@ -104,7 +104,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.19;
+our $VERSION = 0.21;
 
 =head1 CONSTRUCTORS
 
