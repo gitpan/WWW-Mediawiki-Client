@@ -1,0 +1,25 @@
+Wix TODOs
+
+This is stuff that needs to be done to wix to make it more useable.
+
+* Wix currently always marks pages as watched.  Consider storing the entire
+  html file as ref so that we can do this according to the Mediawiki user 
+  preference.
+
+* Make more use of the output levels in general (or scrap them)
+
+* Consider switching to Wikimedia's conflict resolution facility
+
+* Add a do_status command for checking login status
+
+* Add a mechanism for checking if wix is run in the right directory level
+
+* Switch to Exception::Class from regular die exceptions (Carp appears to
+  be broken for some uses).
+
+* Perhaps separate the language code from the Base URL
+
+* Add a commit comment editor
+
+* Add user override for commiting text in which there might be conflicts
+
