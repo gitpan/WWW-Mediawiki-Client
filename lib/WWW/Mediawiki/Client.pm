@@ -106,7 +106,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.24;
+our $VERSION = 0.25;
 
 =head1 CONSTRUCTORS
 
@@ -297,7 +297,7 @@ sub output_level {
     my $null = File::Spec->devnull;
     eval {
         open $self->{debug_fh}, ">$null";
-        open $self->{info_fh}, ">$null";
+        open $self->{info_fr}, ">$null";
         open $self->{error_fh}, ">$null";
     } or confess "Couldn't open $null.";
     open $self->{debug_fh}, ">&STDERR"
@@ -379,14 +379,14 @@ sub do_login {
         ]
     );
     if ($res->is_success) {
-	print $self->{error_fh} "Login did not work, please check host, login path, user and password.\n";
+	print $self->{error_fh}, "Login did not work, please check host, login path, user and password.\n";
         return $self;
     }
     if ($res->code != 302) {
-        print $self->{error_fh} "Login to ", $url, " failed\n";
-        print $self->{error_fh} "Error code: ", $res->status_line, "\n";
+        print $self->{error_fh}, "Login to ", $url, " failed\n";
+        print $self->{error_fh}, "Error code: ", $res->status_line, "\n";
         if ($res->code == 400) {
-		print $self->{info_fh} "Tip: If the hostname didn't start with 'http://' add it.\n";
+		print $self->{info_fh}, "Tip: If the hostname didn't start with 'http://' add it.\n";
         }
         return $self;
     }
@@ -457,7 +457,6 @@ sub do_update {
     my $nv = $self->_merge($filename, $rv, $sv, $lv);
     my $status = $self->_get_update_status($rv, $sv, $lv, $nv);
 
-            if $status;
     # save the new merged version as our local copy
     return unless $status;  # nothing changes, nothing to do
     return if $status eq STATUS_ADD;
@@ -655,11 +654,11 @@ sub _get_server_page {
             . "\nHTTP get failed with: " . $res->status_line
             unless $res->is_success;
     my $doc = $res->content;
-    my $text = $self->_get_wiki_tag($doc, "textarea");
+    my $text = $self->_get_wiki_text($doc);
     $self->{server_date} = $self->_get_edit_date($doc);
     $self->{server_token} = $self->_get_edit_token($doc);
     if (!$self->{server_date}) {
-    	my $headline1 = $self->_get_wiki_tag($doc, "h1");
+    	my $headline1 = $self->_get_server_error($doc);
 	die "Error message from the server: ", $headline1, "\n"
         	if ($headline1);
 	die "Could not identify the error, this is what I got:\n" . $res->content
@@ -668,10 +667,19 @@ sub _get_server_page {
     return $text;
 }
 
-sub _get_wiki_tag {
-    my ($self, $doc, $tag) = @_;
+sub _get_wiki_text {
+    my ($self, $doc) = @_;
     my $p = HTML::TokeParser->new(\$doc);
-    $p->get_tag($tag);
+    $p->get_tag("textarea");
+    my $text = $p->get_text;
+    $text =~ s///gs;                      # convert endlines
+    return $text;
+}
+
+sub _get_server_error {
+    my ($self, $doc) = @_;
+    my $p = HTML::TokeParser->new(\$doc);
+    $p->get_tag("h1");
     my $text = $p->get_text;
     $text =~ s///gs;                      # convert endlines
     return $text;

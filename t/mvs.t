@@ -61,6 +61,7 @@ is($mvs->_filename_to_url('San_Francisco.wiki', 'wiki/wiki.phtml?action=edit&tit
         'Can we convert the filename to the URL?');
 
 # Can we harvest the Wiki data from the HTML page?
+print STDERR $HtmlData;
 eq_or_diff($mvs->_get_wiki_text($HtmlData), $WikiData, 
         'get_wiki_text returns the correct text');
 

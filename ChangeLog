@@ -2,9 +2,17 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2005-03-29 15:33:22 GMT Mark Jaroski <mark@geekhive.net>
+    Summary:
+      Fixed a bug
+    Revision:
+      wix-mainline--0.1--patch-21
+
+      Fixed a serious bug which prevented tests from running correctly.
+
 2005-03-20 16:58:12 GMT Mark Jaroski <mark@geekhive.net>
     Summary:
-      Added proxy support
+      Better error messages.
     Revision:
       wix-mainline--0.1--patch-20
 
