@@ -104,7 +104,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.14;
+our $VERSION = 0.19;
 
 =head1 CONSTRUCTORS
 
@@ -765,7 +765,13 @@ __END__
 
 =head1 AUTHORS
 
-Mark Jaroski <mark@geekhive.net>, Mike Wisemann <mike@fhi-berlin.mpg.de>
+=item Mark Jaroski <mark@geekhive.net> 
+
+Original author
+
+=item Mike Wesemann <mike@fhi-berlin.mpg.de>
+
+Added support for Mediawiki 1.3.10+ edit tokens
 
 =head1 LICENSE
 

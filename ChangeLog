@@ -2,6 +2,16 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2005-02-19 11:01:01 GMT Mark Jaroski <mark@geekhive.net>
+    Summary:
+      Fixed credits, version
+    Revision:
+      wix-mainline--0.1--patch-15
+
+      I misspelled Mike Wesemann's name in the credits in the last version,
+      and forgot to update the module version number.  Those things are
+      fixed now.
+
 2005-02-18 17:58:15 GMT Mark Jaroski <mark@geekhive.net>	
     Summary:
       Mediawiki 1.3.10 security token support, Wikitravel language support.
