@@ -86,7 +86,7 @@ sub HELP_MESSAGE {
 
 sub VERSION_MESSAGE {
     my $fh = shift;
-    print $fh "wix Mediawiki versioning system version $VERSION\n";
+    print $fh "Mediawiki versioning system version $VERSION\n";
 }
 
 
@@ -98,35 +98,35 @@ __END__
 
 =head1 NAME
 
-wix - A command line wiki client 
+mvs - A command line Mediawiki client 
 
 =head1 SYNOPSIS
 
-  wix [Options] command [Options] [filename]
+  mvs [Options] command [Options] [filename]
 
-  wix -h|--help
-  wix --version
+  mvs -h|--help
+  mvs --version
 
   mkdir wikistuff
   cd wikistuff
 
-  wix [-q|-v] [-d <wikihost>] [-u <username>] [-p <password> ] login
+  mvs [-q|-v] [-d <wikihost>] [-u <username>] [-p <password> ] login
 
-  wix [-q|-v] update [<file> ..]
-  wix [-q|-v] up [<file> ..]
+  mvs [-q|-v] update [<file> ..]
+  mvs [-q|-v] up [<file> ..]
 
-  wix [-q|-v] commit [<file> ..]
-  wix [-q|-v] com [<file> ..]
+  mvs [-q|-v] commit [<file> ..]
+  mvs [-q|-v] com [<file> ..]
 
 =head1 DESCRIPTION
 
-C<wix> is a command line client whose purpose is to simplify offline
+C<mvs> is a command line client whose purpose is to simplify offline
 editing of Wiki content.  It allows you to get any number of pages from a
 given Mediawiki site, edit the pages with any editor, get and merge any
 concurrent updates of the pages, and then safely commit the users own
 changes back to the version of the page on the server.
 
-The C<wix> commands which take a filename argument only accept a single
+The C<mvs> commands which take a filename argument only accept a single
 filename as so to avoid taking up too much server bandwidth.
 
 =head1 QUICKSTART
@@ -140,7 +140,7 @@ preferences, etc.
 It should hopefully go without saying that you will want to become familiar
 with the editorial, usage, and copyright guidelines of the site.  You
 should probably also make some contributions through the normal UI, and
-learn about following recent changes before contributing using wix.
+learn about following recent changes before contributing using mvs.
 
 In addition for the sake of this test you should already have a user page
 like User:<username> with something on it, where <username> is the user
@@ -161,7 +161,7 @@ before cd into that directory.
 
 All of the operations below should be done from this directory.
 
-=head2 Step 3:  Login using C<wix login>
+=head2 Step 3:  Login using C<mvs login>
 
 To use login you will need to know the I<site_url> for the Mediawiki site
 to which you want to contribute.  This will simply be the regular URL for
@@ -172,17 +172,17 @@ version of Wikitravel I would use the I<site_url>
 
 Now use the I<site_url> with your username and password to login.
 
-  wix -d http://www.wikitravel.org/en -u <username> -p 'secret' login
+  mvs -d http://www.wikitravel.org/en -u <username> -p 'secret' login
 
 Now anything you submit to the Mediawiki server will be credited to user
 "<username>".
 
-=head2 Step 4:  Use C<wix update> to fetch one or more working files
+=head2 Step 4:  Use C<mvs update> to fetch one or more working files
 
 You can fetch existing material off of the site, or create new pages with
-C<wix update>, remembering that your files will need a C<.wiki> extension:
+C<mvs update>, remembering that your files will need a C<.wiki> extension:
 
-  wix update User:<username>.wiki User:<username>/Test_Page.wiki
+  mvs update User:<username>.wiki User:<username>/Test_Page.wiki
 
 This should produce the output:
 
@@ -192,11 +192,11 @@ This should produce the output:
 The U (for Updated) means that User:<username> was found on the server and
 its contents inserted into the local files.  The A (for Added) means that
 the User:<username>/Test_Page.wiki page does not yet exist on the server,
-and will be added when you run C<wix commit>.
+and will be added when you run C<mvs commit>.
 
 Note that both of the pages we are working with are within I<your>
 User Namespace.  It's probably a good idea to restrict yourself to working
-with such pages while you are experimenting with C<wix>
+with such pages while you are experimenting with C<mvs>
 
 =head2 Step 5:  Edit the files to make corrections and contributions
 
@@ -209,24 +209,24 @@ your editor:
 Of course if you don't find a highlighting file for you editor you are
 welcome to create one and submit it to the page above.
 
-=head2 Step 6:  Use C<wix commit> to submit your changes
+=head2 Step 6:  Use C<mvs commit> to submit your changes
 
 When you are done editing a file and would like to submit your changes to
-the wiki server use C<wix commit> to do so:
+the wiki server use C<mvs commit> to do so:
 
-  wix -m 'commit message' commit User:<username>.wiki
+  mvs -m 'commit message' commit User:<username>.wiki
 
 Where 'commit message' is whatever you want to say about the changes you
-are submitting and why.  You must provide a commit message or C<wix commit>
-will fail.  You might also find that C<wix commit> fails complaining that
+are submitting and why.  You must provide a commit message or C<mvs commit>
+will fail.  You might also find that C<mvs commit> fails complaining that
 the file has changed on the server.  If this is the case you will need to
-use C<wix update> again to get the most recent changes.
+use C<mvs update> again to get the most recent changes.
 
 =head2 Step 7: Update your wiki files
 
-You can use C<wix update> again at any time to reconcile any of your files
+You can use C<mvs update> again at any time to reconcile any of your files
 with the most recent changes from the server.  Your changes I<will not> be
-overwritten, but rather C<wix> will try to merge any server changes into
+overwritten, but rather C<mvs> will try to merge any server changes into
 the files as they exist in your working directory.  Note that update and
 commit only work on one file at a time, as so to help prevent accidents and
 server congestion.
@@ -234,8 +234,8 @@ server congestion.
 If for some reason there is a conflict, ie. you and someone else have made
 changes which appear to be incompatible, and cannot be resolved then your
 file will contain a I<conflict message>, as detailed in the documentation
-for C<wix update> below.  You I<must> resolve any conficts I<before>
-attempting to use C<wix commit> on the file.  This is usually a very simple
+for C<mvs update> below.  You I<must> resolve any conficts I<before>
+attempting to use C<mvs commit> on the file.  This is usually a very simple
 matter of choosing one version of the change or another.  You should use
 your best judgement, consulting the relavant C<Talk:> page to try to work
 out an aggreement with the other contributor in cases where you just simply
@@ -246,7 +246,7 @@ disagree.
 You can continue editing and commiting changes with the files in your
 working directory.  It might be a good idea for you to eventually create
 multiple working directories per site, perhaps grouping them by subject.
-This will work fine with C<wix> since it does I<not> need to have a
+This will work fine with C<mvs> since it does I<not> need to have a
 complete copy of all of the pages from a given server in a given working
 directory to work.
 
@@ -259,13 +259,13 @@ commands:
 
 =over 4
 
-=item wix login
+=item mvs login
 
 Allows the user to login to the Mediawiki server using an I<existing> login
 and password for that server.  After calling C<login> ll C<commit>s from
 the same working directory will be logged as from the logged-in user.
 
-=item wix update
+=item mvs update
 
 Updates the specified file[s] with content from the Mediawiki server.  If a
 file does not exist it is created and populated with the current online
@@ -290,7 +290,7 @@ slightly differnt syntax:
   This is the local version
   <<<<<<
 
-C<wix update> reports the status of files which it touches to stderr with
+C<mvs update> reports the status of files which it touches to stderr with
 a letter indicating the file status, and then name of the file, again like
 CVS.  The status letters are:
 
@@ -324,10 +324,10 @@ version are ignored.
 If no filenames are given on the command line, all visible files with the
 .wiki extension are processed.
 
-When running C<wix commit> you I<must> use the C<-m> flag to send a commit
+When running C<mvs commit> you I<must> use the C<-m> flag to send a commit
 message to the Mediawiki server.  eg:
 
-  wix -m 'Added Hotel Eldorado' commit Paris.wiki
+  mvs -m 'Added Hotel Eldorado' commit Paris.wiki
 
 =back
 
@@ -351,15 +351,15 @@ Causes the command to be quiet.  Informational messages are suppressed.
 
 =head2 -u
 
-Specifies a username for C<wix login>.
+Specifies a username for C<mvs login>.
 
 =head2 -p
 
-Specifies a password for C<wix login>.
+Specifies a password for C<mvs login>.
 
 =head2 -m
 
-A commit message for C<wix commit>.  Use this to explain the nature of your
+A commit message for C<mvs commit>.  Use this to explain the nature of your
 changes.
 
 =head2 -e

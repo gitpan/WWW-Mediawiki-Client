@@ -2,6 +2,14 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2005-02-19 11:10:32 GMT Mark Jaroski <mark@geekhive.net>
+    Summary:
+      s/wix/mvs/g in the mvs docs
+    Revision:
+      wix-mainline--0.1--patch-16
+
+      Oops.  mvs was still calling itself wix.  It's fixed now.
+
 2005-02-19 11:01:01 GMT Mark Jaroski <mark@geekhive.net>
     Summary:
       Fixed credits, version
