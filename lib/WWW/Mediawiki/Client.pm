@@ -94,6 +94,8 @@ use constant EDIT_TIME_NAME     => 'wpEdittime';
 use constant EDIT_TOKEN_NAME    => 'wpEditToken';
 use constant EDIT_WATCH_NAME    => 'wpWatchthis';
 use constant EDIT_MINOR_NAME    => 'wpMinoredit';
+use constant CHECKED            => 1;
+use constant UNCHECKED          => 0;
 # login form widgets
 use constant USERNAME_NAME      => 'wpName';
 use constant PASSWORD_NAME      => 'wpPassword';
@@ -104,7 +106,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.23;
+our $VERSION = 0.24;
 
 =head1 CONSTRUCTORS
 
@@ -325,6 +327,22 @@ sub commit_message {
     return $self->{commit_message};
 }
 
+=head2 minor_edit
+
+  my $bool = $wmc->minor_edit($bool);
+
+Mediawiki allows users to mark some of their edits as minor using the "This
+is a minor edit" checkbox.  The field C<minor_edit> allows a commit from
+the mediawiki client to be marked as a minor edit.
+
+=cut
+
+sub minor_edit {
+    my ($self, $m) = @_;
+    $self->{minor_edit} = $m if $m;
+    return $self->{minor_edit};
+}
+
 =head1 Instance Methods
 
 =head2 do_login
@@ -345,7 +363,7 @@ sub do_login {
     croak "Must have username and password to login."
             unless $self->{username} && $self->{password};
     print { $self->{info_fh} } 
-            "Loging in as " . $self->{username} . "\n";
+            "Logging in as " . $self->{username} . "\n";
     my $url = $self->{site_url} . '/' . $self->{login_path};
     my $username_tag = USERNAME_NAME;
     my $password_tag = PASSWORD_NAME;
@@ -360,6 +378,18 @@ sub do_login {
             $submit_tag     => $submitval,
         ]
     );
+    if ($res->is_success) {
+	print $self->{error_fh} "Login did not work, please check host, login path, user and password.\n";
+        return $self;
+    }
+    if ($res->code != 302) {
+        print $self->{error_fh} "Login to ", $url, " failed\n";
+        print $self->{error_fh} "Error code: ", $res->status_line, "\n";
+        if ($res->code == 400) {
+		print $self->{info_fh} "Tip: If the hostname didn't start with 'http://' add it.\n";
+        }
+        return $self;
+    }
     print { $self->{debug_fh} } "Saving cookie jar.\n";
     $self->{ua}->cookie_jar->save
             or croak "Could not save cookie jar.";
@@ -426,7 +456,7 @@ sub do_update {
     my $rv = $self->_get_reference_page($filename);
     my $nv = $self->_merge($filename, $rv, $sv, $lv);
     my $status = $self->_get_update_status($rv, $sv, $lv, $nv);
-    print { $self->{info_fh} } "$status $filename\n" 
+
             if $status;
     # save the new merged version as our local copy
     return unless $status;  # nothing changes, nothing to do
@@ -592,6 +622,7 @@ sub _upload {
     my $ref = $self->_get_ref_filename($filename);
     my $edit_time = $self->{server_date};
     my $edit_token = $self->{server_token};
+    my $minor_edit = $self->{minor_edit} ? CHECKED : UNCHECKED;
     # take field names from defined constants
     my $textbox = TEXTAREA_NAME;
     my $comment = COMMENT_NAME;
@@ -600,6 +631,7 @@ sub _upload {
     my $timename = EDIT_TIME_NAME;
     my $tokenname = EDIT_TOKEN_NAME;
     my $watchbox = EDIT_WATCH_NAME;
+    my $minorbox = $self->{minor_edit} ? EDIT_MINOR_NAME : '';
     print { $self->{debug_fh} } " to $url.\n";
     my $res = $self->{ua}->request(POST $url,
         [ 
@@ -607,8 +639,9 @@ sub _upload {
             $comment    => $self->{commit_message},
             $subname    => $subvalue,
             $timename   => $edit_time,
-            $tokenname   => $edit_token,
+            $tokenname  => $edit_token,
             $watchbox   => 1,
+            $minorbox   => $minor_edit,
         ]
     );
 }
@@ -618,20 +651,27 @@ sub _get_server_page {
     my $url = $self->_filename_to_edit_url($filename);
     print { $self->{debug_fh} }"Fetching $url\n";
     my $res = $self->{ua}->get($url);
-    croak "Couldn't fetch $filename from the server."
-            . "HTTP get failed with: " . $res->code
+    croak "Couldn't fetch \"$filename\" from the server."
+            . "\nHTTP get failed with: " . $res->status_line
             unless $res->is_success;
     my $doc = $res->content;
-    my $text = $self->_get_wiki_text($doc);
+    my $text = $self->_get_wiki_tag($doc, "textarea");
     $self->{server_date} = $self->_get_edit_date($doc);
     $self->{server_token} = $self->_get_edit_token($doc);
+    if (!$self->{server_date}) {
+    	my $headline1 = $self->_get_wiki_tag($doc, "h1");
+	die "Error message from the server: ", $headline1, "\n"
+        	if ($headline1);
+	die "Could not identify the error, this is what I got:\n" . $res->content
+		. "Unknown error, the above is I got from the server.\n";
+    }
     return $text;
 }
 
-sub _get_wiki_text {
-    my ($self, $doc) = @_;
+sub _get_wiki_tag {
+    my ($self, $doc, $tag) = @_;
     my $p = HTML::TokeParser->new(\$doc);
-    $p->get_tag("textarea");
+    $p->get_tag($tag);
     my $text = $p->get_text;
     $text =~ s///gs;                      # convert endlines
     return $text;
@@ -773,6 +813,10 @@ Original author
 =item Mike Wesemann <mike@fhi-berlin.mpg.de>
 
 Added support for Mediawiki 1.3.10+ edit tokens
+
+=item Bernhard Kaindl <bkaindl@ffii.org>
+
+Improved error messages.
 
 =head1 LICENSE
 

@@ -1,5 +1,4 @@
-#!/usr/bin/perl -w
-
+#!/usr/bin/perl -w 
 use strict;
 use WWW::Mediawiki::Client;
 use Getopt::Std;
@@ -27,7 +26,7 @@ use constant WIKIPEDIA_DEFAULTS =>
 ##############################################################################
 our ( $opt_h, $opt_q, $opt_d, $opt_v, 
       $opt_m, $opt_u, $opt_p, $opt_s,
-      $opt_e, $opt_a, $opt_l);    # Getopt output
+      $opt_e, $opt_a, $opt_l, $opt_M);    # Getopt output
 our $VERSION = $WWW::Mediawiki::Client::VERSION;
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
@@ -76,6 +75,7 @@ sub main {
     $wmc->action_path($opt_a) if $opt_a;
     $wmc->edit_path($opt_e) if $opt_e;
     $wmc->login_path($opt_l) if $opt_l;
+    $wmc->minor_edit(1) if $opt_M;
     # run command
     $wmc->$method(@_);
 }
@@ -91,7 +91,7 @@ sub VERSION_MESSAGE {
 
 
 # parse command line
-getopts('hqvd:m:u:p:s:e:a:l:');
+getopts('hqvMd:m:u:p:s:e:a:l:');
 main (@ARGV);
 
 __END__
@@ -110,13 +110,13 @@ mvs - A command line Mediawiki client
   mkdir wikistuff
   cd wikistuff
 
-  mvs [-q|-v] [-d <wikihost>] [-u <username>] [-p <password> ] login
+  mvs [-q|-v] [-d <wikihost>] [-u <username>] [-p <password> ] [-l <login_path>] login
 
   mvs [-q|-v] update [<file> ..]
   mvs [-q|-v] up [<file> ..]
 
-  mvs [-q|-v] commit [<file> ..]
-  mvs [-q|-v] com [<file> ..]
+  mvs [-q|-v] -m "commit message" commit [<file> ..]
+  mvs [-q|-v] -m "commit message" com [<file> ..]
 
 =head1 DESCRIPTION
 
@@ -173,6 +173,19 @@ version of Wikitravel I would use the I<site_url>
 Now use the I<site_url> with your username and password to login.
 
   mvs -d http://www.wikitravel.org/en -u <username> -p 'secret' login
+
+If your mediawiki install uses a nonstandard login path, speciy
+it on login:
+
+  mvs \
+    -d http://www.wikitravel.org/en \
+    -u <username> \
+    -p 'secret' \
+    -l 'mw/wiki.phtml?action=submit&title=Special:Userlogin' \
+    login
+
+You can change the edit and action paths in the created .mediawiki
+file after successful login accordingly.
 
 Now anything you submit to the Mediawiki server will be credited to user
 "<username>".
@@ -349,33 +362,38 @@ Display usage information.
 
 Causes the command to be quiet.  Informational messages are suppressed.
 
-=head2 -u
+=head2 -u "<username>"
 
 Specifies a username for C<mvs login>.
 
-=head2 -p
+=head2 -p "<password>"
 
 Specifies a password for C<mvs login>.
 
-=head2 -m
+=head2 -m "<your message>"
 
 A commit message for C<mvs commit>.  Use this to explain the nature of your
 changes.
 
-=head2 -e
+=head2 -M
+
+This is a minor edit.  Use this when commintting a change with C<mvs commit>.
+
+=head2 -e "<edit path>"
 
 The mediawiki edit path.  For use with Mediawiki servers which have an
 altered path to a page's edit page.
 
-=head2 -a
+=head2 -a "<action path>"
 
 The mediawiki action path.  For use with Mediawiki servers which have an
 altered path to a page's action page.
 
-=head2 -l
+=head2 -l "<login path>"
 
 The mediawiki login path.  For use with Mediawiki servers which have an
 altered path to a page's login page.
+
 
 =head1 CAVEATS
 
@@ -396,11 +414,15 @@ L<http://www.cvs.org|The CVS home page>
 
 =head1 AUTHORS
 
-Mark Jaroski <mark@geekhive.net>
+=item Mark Jaroski <mark@geekhive.net>
+
+=item Bernhard Kaindl <bkaindl@ffii.org>
+
+Improved error handling and usage messages.
 
 =head1 COPYRIGHT
 
-© Copyright 2004, Mark Jaroski
+© Copyright 2004-2005, Mark Jaroski
 
 All rights reserved. This program is free software; you can redistribute it
 and/or modify it under the same terms as Perl itself.

@@ -2,6 +2,15 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2005-03-20 16:58:12 GMT Mark Jaroski <mark@geekhive.net>
+    Summary:
+      Added proxy support
+    Revision:
+      wix-mainline--0.1--patch-20
+
+      Improved error reporting by Bernhard Kaindl.  Added -M minor edit
+      flag.
+
 2005-03-04 15:43:12 GMT Mark Jaroski <mark@geekhive.net>
     Summary:
       Added proxy support
