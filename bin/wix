@@ -8,6 +8,19 @@ use Pod::Usage;
 ##############################################################################
 # Constants                                                                  #
 ##############################################################################
+use constant WIKITRAVEL_DEFAULTS =>
+          'edit_path' => 'wiki/wiki.phtml?action=edit&title=',
+          'login_path' => 'wiki/wiki.phtml?action=submit&title=Special:Userlogin',
+          'action_path' => 'wiki/wiki.phtml?action=submit&title=',
+          'space_substitute' => '_',
+    ;
+
+use constant WIKIPEDIA_DEFAULTS =>
+          'space_substitute' => '+',
+          'action_path' => 'w/wiki.phtml?action=submit&title=',
+          'edit_path' => 'w/wiki.phtml?action=edit&title=',
+          'login_path' => 'w/wiki.phtml?action=submit&title=Special:Userlogin',
+    ;
 
 ##############################################################################
 # Fields                                                                     #
@@ -29,9 +42,14 @@ sub main {
     my $method= "do_$command";
     # do help if indicated
     pod2usage(-verbose => 1) if $opt_h;
-    # get the command or print 
+    # create the init array, and maybe pre-populate it
+    my @init;
+    @init = WIKIPEDIA_DEFAULTS
+            if $opt_d and $opt_d =~ /^http:\/\/[^\.]*\.wikipedia\.org/;
+    @init = WIKITRAVEL_DEFAULTS
+            if $opt_d and $opt_d =~ /^http:\/\/www\.wikitravel\.org/;
     # instanciate a WWW::Mediawiki::Client obj
-    my $wix = WWW::Mediawiki::Client->new();
+    my $wix = WWW::Mediawiki::Client->new(@init);
     unless ($wix->can($method)) {
         print "Command \"$command\" not supported.\n\n";
         pod2usage(-verbose => 1);
