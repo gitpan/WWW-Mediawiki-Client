@@ -104,7 +104,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.21;
+our $VERSION = 0.22;
 
 =head1 CONSTRUCTORS
 
@@ -492,7 +492,7 @@ sub do_commit {
     my $sv = $self->_get_server_page($filename);
     my $rv = $self->_get_reference_page($filename);
     chomp ($lv, $sv, $rv);
-    next if $sv eq $lv;
+    return if $sv eq $lv;
     croak "$filename has changed on the server. "
             ."Please do an update and try again"
             unless $sv eq $rv;

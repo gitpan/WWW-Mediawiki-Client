@@ -2,6 +2,16 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2005-02-20 21:15:42 GMT Mark Jaroski <mark@geekhive.net>
+    Summary:
+      Fixed a bug with trying to commit unchanged file
+    Revision:
+      wix-mainline--0.1--patch-18
+
+      I had mistakenly left a "next" statement in the commit function after
+      making it a single file only action. Kudos to Wikibooks user kelvSYC
+      who found the bug.
+
 2005-02-19 11:13:22 GMT Mark Jaroski <mark@geekhive.net>
     Summary:
       correct version number
