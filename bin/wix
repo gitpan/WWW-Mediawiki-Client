@@ -92,10 +92,8 @@ given Mediawiki site, edit the pages with any editor, get and merge any
 concurrent updates of the pages, and then safely commit the users own
 changes back to the version of the page on the server.
 
-All C<wix> commands allow you to specify one or more files to get from the
-wiki server.  If no file is specified on the command line C<wix> will
-attempt to perform the specified commnd on all files I<under> the current
-working directory with the extension C<wiki>.
+The C<wix> commands which take a filename argument only accept a single
+filename as so to avoid taking up too much server bandwidth.
 
 =head1 QUICKSTART
 
@@ -183,12 +181,14 @@ will fail.  You might also find that C<wix commit> fails complaining that
 the file has changed on the server.  If this is the case you will need to
 use C<wix update> again to get the most recent changes.
 
-=head2 Step 7: Update all of your wiki files
+=head2 Step 7: Update your wiki files
 
-You can use C<wix update> again at any time to reconcile your files with
-the most recent changes from the server.  Your changes I<will not> be
+You can use C<wix update> again at any time to reconcile any of your files
+with the most recent changes from the server.  Your changes I<will not> be
 overwritten, but rather C<wix> will try to merge any server changes into
-the files as they exist in your working directory.
+the files as they exist in your working directory.  Note that update and
+commit only work on one file at a time, as so to help prevent accidents and
+server congestion.
 
 If for some reason there is a conflict, ie. you and someone else have made
 changes which appear to be incompatible, and cannot be resolved then your

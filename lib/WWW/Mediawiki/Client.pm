@@ -413,27 +413,27 @@ B<Throws:>
 
 sub do_update {
     my $self = shift;
+    my $filename = shift;
     croak "No server URL specified." unless $self->{site_url};
-    my @files = @_ ? @_ : $self->_list_wiki_files;
-    print { $self->{debug_fh} } "Updating: " . join(' ', @files) . "\n";
-    foreach my $filename (@files) {
-        $self->_check_path($filename);
-        my $sv = $self->_get_server_page($filename);
-        my $lv = $self->_get_local_page($filename);
-        my $rv = $self->_get_reference_page($filename);
-        my $nv = $self->_merge($filename, $rv, $sv, $lv);
-        my $status = $self->_get_update_status($rv, $sv, $lv, $nv);
-        print { $self->{info_fh} } "$status $filename\n" 
-                if $status;
-        # save the new merged version as our local copy
-        open OUT, ">$filename" or confess "Cannot open $filename for writing.";
-        print OUT $nv;
-        # save the server version out as the reference file
-        $filename = $self->_get_ref_filename($filename);
-        open OUT, ">$filename" or confess "Cannot open $filename for writing.";
-        print OUT $sv;
-        close OUT;
-    }
+    print { $self->{debug_fh} } "Updating: $filename\n";
+    $self->_check_path($filename);
+    my $sv = $self->_get_server_page($filename);
+    my $lv = $self->_get_local_page($filename);
+    my $rv = $self->_get_reference_page($filename);
+    my $nv = $self->_merge($filename, $rv, $sv, $lv);
+    my $status = $self->_get_update_status($rv, $sv, $lv, $nv);
+    print { $self->{info_fh} } "$status $filename\n" 
+            if $status;
+    # save the new merged version as our local copy
+    return unless $status;  # nothing changes, nothing to do
+    return if $status eq STATUS_ADD;
+    open OUT, ">$filename" or confess "Cannot open $filename for writing.";
+    print OUT $nv;
+    # save the server version out as the reference file
+    $filename = $self->_get_ref_filename($filename);
+    open OUT, ">$filename" or confess "Cannot open $filename for writing.";
+    print OUT $sv;
+    close OUT;
 }
 
 =head2 do_up
@@ -479,30 +479,28 @@ B<Throws:>
 
 sub do_commit {
     my $self = shift;
+    my $filename = shift;
     croak "No commit message specified" 
             unless $self->{commit_message};
     croak "No server URL specified." unless $self->{site_url};
-    my @files = @_ ? @_ : $self->_list_wiki_files;
-    foreach my $filename (@files) {
-        print { $self->{info_fh} } "commiting $filename\n";
-        croak "No such file!" unless -e $filename;
-        my $lv = $self->_get_local_page($filename);
-        my $sv = $self->_get_server_page($filename);
-        my $rv = $self->_get_reference_page($filename);
-        chomp ($lv, $sv, $rv);
-        next if $sv eq $lv;
-        croak "$filename has changed on the server. "
-                ."Please do an update and try again"
-                unless $sv eq $rv;
-        croak "$filename appears to have unresolved conflicts"
-                if $self->_conflicts_found_in($lv);
-        $self->_upload($filename, $lv);
-        # save the local version as the reference version
-        $filename = $self->_get_ref_filename($filename);
-        open OUT, ">$filename" or die "Cannot open $filename for writing.";
-        print OUT $lv;
-        close OUT;
-    }
+    print { $self->{info_fh} } "commiting $filename\n";
+    croak "No such file!" unless -e $filename;
+    my $lv = $self->_get_local_page($filename);
+    my $sv = $self->_get_server_page($filename);
+    my $rv = $self->_get_reference_page($filename);
+    chomp ($lv, $sv, $rv);
+    next if $sv eq $lv;
+    croak "$filename has changed on the server. "
+            ."Please do an update and try again"
+            unless $sv eq $rv;
+    croak "$filename appears to have unresolved conflicts"
+            if $self->_conflicts_found_in($lv);
+    $self->_upload($filename, $lv);
+    # save the local version as the reference version
+    $filename = $self->_get_ref_filename($filename);
+    open OUT, ">$filename" or die "Cannot open $filename for writing.";
+    print OUT $lv;
+    close OUT;
 }
 
 =head2 do_com
@@ -613,6 +611,8 @@ sub _get_server_page {
     my $url = $self->_filename_to_edit_url($filename);
     print { $self->{debug_fh} }"Fetching $url";
     my $res = $self->{ua}->get($url);
+    croak "Couldn't fetch $filename from the server."
+            unless $res->is_success;
     my $doc = $res->content;
     my $text = $self->_get_wiki_text($doc);
     $self->{server_date} = $self->_get_edit_date($doc);
@@ -718,7 +718,7 @@ sub _get_update_status {
     chomp ($rv, $sv, $lv, $nv);
     my $status;
     $status = STATUS_LOCAL_MODIFIED if $lv ne $rv;
-    $status = STATUS_SERVER_MODIFIED if $rv ne $sv;
+    $status = STATUS_SERVER_MODIFIED if $sv && $rv ne $sv;
     $status = STATUS_ADD unless $sv;
     $status = STATUS_CONFLICT if $self->_conflicts_found_in($nv);
     return $status;
