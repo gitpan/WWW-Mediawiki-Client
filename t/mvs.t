@@ -8,10 +8,10 @@ BEGIN {
 }
 
 # Fields
-my ($HtmlData, $WikiData, $wix);
+my ($HtmlData, $WikiData, $mvs);
 
 # test the constructor first
-ok($wix = WWW::Mediawiki::Client->new(site_url => 'http://localhost/'), 
+ok($mvs = WWW::Mediawiki::Client->new(site_url => 'http://localhost/'), 
         'Can instanciate a WWW::Mediawiki::Client object');
 
 # load the test data
@@ -33,49 +33,49 @@ $/= "\n";
 chomp ($RefData, $ServerData, $LocalData, $MergedData);
 
 # make a test repository
-mkdir '/tmp/wixtest' 
+mkdir '/tmp/mvstest' 
         or die "Could not make test dir.  Check the permissions on /tmp.";
 
-chdir '/tmp/wixtest';
+chdir '/tmp/mvstest';
 
 
 #TODO: {
 #    local $TODO = "Can't test update without webserver.";
-#    ok($wix->do_update('paris.wiki'), 'Test update');
-#    ok($wix->do_up('paris.wiki'), 'Test calling update as up');
+#    ok($mvs->do_update('paris.wiki'), 'Test update');
+#    ok($mvs->do_up('paris.wiki'), 'Test calling update as up');
 #}
 
 #TODO: {
 #    local $TODO = "Can't test commit without webserver.";
-#    ok($wix->do_update('paris.wiki'), 'Test update');
-#    ok($wix->do_up('paris.wiki'), 'Test calling update as up');
+#    ok($mvs->do_update('paris.wiki'), 'Test update');
+#    ok($mvs->do_up('paris.wiki'), 'Test calling update as up');
 #}
 
 # Test the filename method
-is($wix->_filename_to_url('San_Francisco.wiki', 'wiki/wiki.phtml?action=edit&title='),
+is($mvs->_filename_to_url('San_Francisco.wiki', 'wiki/wiki.phtml?action=edit&title='),
         'http://localhost/wiki/wiki.phtml?action=edit&title=San+Francisco',
         'Can we convert the filename to the URL?');
-$wix->space_substitute('_');
-is($wix->_filename_to_url('San_Francisco.wiki', 'wiki/wiki.phtml?action=edit&title='),
+$mvs->space_substitute('_');
+is($mvs->_filename_to_url('San_Francisco.wiki', 'wiki/wiki.phtml?action=edit&title='),
         'http://localhost/wiki/wiki.phtml?action=edit&title=San_Francisco',
         'Can we convert the filename to the URL?');
 
 # Can we harvest the Wiki data from the HTML page?
-eq_or_diff($wix->_get_wiki_text($HtmlData), $WikiData, 
+eq_or_diff($mvs->_get_wiki_text($HtmlData), $WikiData, 
         'get_wiki_text returns the correct text');
 
 # Test the conflict detection and separation
-eq_or_diff( $wix->_merge('Paris.wiki', $RefData, $ServerData, $LocalData), 
+eq_or_diff( $mvs->_merge('Paris.wiki', $RefData, $ServerData, $LocalData), 
         $MergedData,
         'does a merge of our test files produce the expected result?');
 
 # Test the login method
-undef $wix;
-$wix = WWW::Mediawiki::Client->new();
-$wix->site_url('http://localhost');
-$wix->username('TestUser');
-$wix->password('testme');
-my $res = $wix->do_login;
+undef $mvs;
+$mvs = WWW::Mediawiki::Client->new();
+$mvs->site_url('http://localhost');
+$mvs->username('TestUser');
+$mvs->password('testme');
+my $res = $mvs->do_login;
 use Data::Dumper;
 
 # Test loading a configuration
@@ -89,40 +89,40 @@ print OUT q{ $VAR1 = {
 }
 };
 close OUT;
-undef $wix;
-$wix = WWW::Mediawiki::Client->new();
-ok($wix = $wix->load_state, 'can run load_state');
-is($wix->password, 'bar', 'retrieved correct password');
-is($wix->username, 'foo', 'retrieved correct username');
-is($wix->output_level, 2, 'retrieved correct output_level');
-is($wix->site_url, 'http://www.somewiki.org', 'retrieved correct site_url');
+undef $mvs;
+$mvs = WWW::Mediawiki::Client->new();
+ok($mvs = $mvs->load_state, 'can run load_state');
+is($mvs->password, 'bar', 'retrieved correct password');
+is($mvs->username, 'foo', 'retrieved correct username');
+is($mvs->output_level, 2, 'retrieved correct output_level');
+is($mvs->site_url, 'http://www.somewiki.org', 'retrieved correct site_url');
 #cleanup
 unlink $conf_file;
 
 # Test saving configuration
-undef $wix;
-$wix = WWW::Mediawiki::Client->new();
-$wix->username('fred');
-$wix->password('3117p4sS');
-$wix->output_level(1);
-$wix->site_url('http://www.someotherwiki.org');
-ok($wix->save_state, 'can run save_state');
-undef $wix;
-$wix = WWW::Mediawiki::Client->new();
-$wix = $wix->load_state;
-is($wix->password, '3117p4sS', 'retrieved correct password');
-is($wix->username, 'fred', 'retrieved correct username');
-is($wix->output_level, 1, 'retrieved correct output_level');
-is($wix->site_url, 'http://www.someotherwiki.org', 'retrieved correct site_url');
+undef $mvs;
+$mvs = WWW::Mediawiki::Client->new();
+$mvs->username('fred');
+$mvs->password('3117p4sS');
+$mvs->output_level(1);
+$mvs->site_url('http://www.someotherwiki.org');
+ok($mvs->save_state, 'can run save_state');
+undef $mvs;
+$mvs = WWW::Mediawiki::Client->new();
+$mvs = $mvs->load_state;
+is($mvs->password, '3117p4sS', 'retrieved correct password');
+is($mvs->username, 'fred', 'retrieved correct username');
+is($mvs->output_level, 1, 'retrieved correct output_level');
+is($mvs->site_url, 'http://www.someotherwiki.org', 'retrieved correct site_url');
 unlink $conf_file;
 
 
 # clean up
 END {
     unlink $conf_file;
-    unlink '.wix_cookies.dat';
+    unlink '.mediawiki_cookies.dat';
     chdir;
-    rmdir '/tmp/wixtest' or die "Hey... can't delete the test dir.";
+    rmdir '/tmp/mvstest' or die "Hey... can't delete the test dir.";
 }
 
 1;

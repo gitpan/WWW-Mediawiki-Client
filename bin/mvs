@@ -9,9 +9,9 @@ use Pod::Usage;
 # Constants                                                                  #
 ##############################################################################
 use constant WIKITRAVEL_DEFAULTS =>
-          'edit_path' => 'wiki/wiki.phtml?action=edit&title=',
-          'login_path' => 'wiki/wiki.phtml?action=submit&title=Special:Userlogin',
-          'action_path' => 'wiki/wiki.phtml?action=submit&title=',
+          'edit_path' => 'wiki/en/index.php?action=edit&title=',
+          'login_path' => 'wiki/en/index.php?action=submit&title=Special:Userlogin',
+          'action_path' => 'wiki/en/index.php?action=submit&title=',
           'space_substitute' => '_',
     ;
 
@@ -46,26 +46,38 @@ sub main {
     my @init;
     @init = WIKIPEDIA_DEFAULTS
             if $opt_d and $opt_d =~ /^http:\/\/[^\.]*\.wikipedia\.org/;
-    @init = WIKITRAVEL_DEFAULTS
-            if $opt_d and $opt_d =~ /^http:\/\/www\.wikitravel\.org/;
+    # FIXME: this is a hack which deals with the language versions of
+    # Wikitravel.  What I really should do is to replace the various x_path
+    # fields in the $wmc object with the proper name value pairs from
+    # Mediawiki.
+    if ($opt_d and $opt_d =~ m{^http://www\.wikitravel\.org(/en|/fr|/ro|/sv|/de)*}) {
+        @init = WIKITRAVEL_DEFAULTS;
+        my $lang = $1;
+        if ($lang) {
+            my %init = @init;
+            for (values %init) { s{/en/}{$lang/} };
+            @init = %init;
+            $opt_d = 'http://www.wikitravel.org';
+        }
+    }
     # instanciate a WWW::Mediawiki::Client obj
-    my $wix = WWW::Mediawiki::Client->new(@init);
-    unless ($wix->can($method)) {
+    my $wmc = WWW::Mediawiki::Client->new(@init);
+    unless ($wmc->can($method)) {
         print "Command \"$command\" not supported.\n\n";
         pod2usage(-verbose => 1);
     }
-    $wix->site_url($opt_d) if $opt_d;
-    $wix->output_level(WWW::Mediawiki::Client::DEBUG) if $opt_v;
-    $wix->output_level(WWW::Mediawiki::Client::QUIET) if $opt_q;
-    $wix->commit_message($opt_m) if $opt_m;
-    $wix->username($opt_u) if $opt_u;
-    $wix->password($opt_p) if $opt_p;
-    $wix->space_substitute($opt_s) if $opt_s;
-    $wix->action_path($opt_a) if $opt_a;
-    $wix->edit_path($opt_e) if $opt_e;
-    $wix->login_path($opt_l) if $opt_l;
+    $wmc->site_url($opt_d) if $opt_d;
+    $wmc->output_level(WWW::Mediawiki::Client::DEBUG) if $opt_v;
+    $wmc->output_level(WWW::Mediawiki::Client::QUIET) if $opt_q;
+    $wmc->commit_message($opt_m) if $opt_m;
+    $wmc->username($opt_u) if $opt_u;
+    $wmc->password($opt_p) if $opt_p;
+    $wmc->space_substitute($opt_s) if $opt_s;
+    $wmc->action_path($opt_a) if $opt_a;
+    $wmc->edit_path($opt_e) if $opt_e;
+    $wmc->login_path($opt_l) if $opt_l;
     # run command
-    $wix->$method(@_);
+    $wmc->$method(@_);
 }
 
 sub HELP_MESSAGE {

@@ -26,22 +26,22 @@ WWW::Mediawiki::Client
   use WWW::Mediawiki::Client;
 
   my $filename = 'Subject.wiki';
-  my $wix = WWW::Mediawiki::Client->new(
+  my $wmc = WWW::Mediawiki::Client->new(
       site_url => 'http://www.wikitravel.org/en'
   );
 
   # output info messages, but not debug
-  $wix->set_output_level(WWW::Mediawiki::Client::INFO);
+  $wmc->set_output_level(WWW::Mediawiki::Client::INFO);
 
   # like cvs update
-  $wix->do_update($filename);
+  $wmc->do_update($filename);
 
   # like cvs commit
-  $wix->do_commit($filename, $message);
+  $wmc->do_commit($filename, $message);
 
   #aliases
-  $wix->do_up($filename);
-  $wix->do_com($filename, $message);
+  $wmc->do_up($filename);
+  $wmc->do_com($filename, $message);
 
 =cut
 
@@ -91,6 +91,7 @@ use constant COMMENT_NAME       => 'wpSummary';
 use constant EDIT_SUBMIT_NAME   => 'wpSave';
 use constant EDIT_SUBMIT_VALUE  => 'Save Page';
 use constant EDIT_TIME_NAME     => 'wpEdittime';
+use constant EDIT_TOKEN_NAME    => 'wpEditToken';
 use constant EDIT_WATCH_NAME    => 'wpWatchthis';
 use constant EDIT_MINOR_NAME    => 'wpMinoredit';
 # login form widgets
@@ -100,8 +101,8 @@ use constant REMEMBER_NAME      => 'wpRemember';
 use constant LOGIN_SUBMIT_NAME  => 'wpLoginattempt';
 use constant LOGIN_SUBMIT_VALUE => 'Log In';
 # our files
-use constant CONFIG_FILE => '.wix';
-use constant COOKIE_FILE => '.wix_cookies.dat';
+use constant CONFIG_FILE => '.mediawiki';
+use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
 our $VERSION = 0.14;
 
@@ -109,7 +110,7 @@ our $VERSION = 0.14;
 
 =head2 new
 
-  my $wix = WWW::Mediawiki::Client->new(site_url = 'http://www.wikitravel.org');
+  my $wmc = WWW::Mediawiki::Client->new(site_url = 'http://www.wikitravel.org');
 
 Accepts name-value pairs which will be used as initial values for any of
 the fields which have accessors below.  Throws the same execptions as the
@@ -150,7 +151,7 @@ sub new {
 
 =head2 site_url
 
-  my $url = $wix->site_url($url);
+  my $url = $wmc->site_url($url);
 
 The site URL is the base url for reaching the Mediawiki server who's
 content you wish to edit.  There is no default.  This has to be set before
@@ -166,7 +167,7 @@ sub site_url {
 
 =head2 site_url
 
-  my $char = $wix->space_substitute($char);
+  my $char = $wmc->space_substitute($char);
 
 Mediawiki allows article names to have spaces, for instance the default
 Meidawiki main page is called "Main Page".  The spaces need to be converted
@@ -186,7 +187,7 @@ sub space_substitute {
 
 =head2 username
 
-  my $url = $wix->username($url);
+  my $url = $wmc->username($url);
 
 The username to use if WWW::Mediawiki::Client is to log in to the Mediawiki server as a given
 user.
@@ -201,7 +202,7 @@ sub username {
 
 =head2 password
 
-  my $url = $wix->password($url);
+  my $url = $wmc->password($url);
 
 The password to use if WWW::Mediawiki::Client is to log in to the Mediawiki server as a given
 user.  Note that this password is sent I<en clair>, so it's probably not a
@@ -217,7 +218,7 @@ sub password {
 
 =head2 edit_path
 
-  my $path = $wix->edit_path($path);
+  my $path = $wmc->edit_path($path);
 
 The edit path is a string which given the site URL and a page name can be
 used to construct the balance of the URL to the edit page for that page on
@@ -234,7 +235,7 @@ sub edit_path {
 
 =head2 action_path
 
-  my $path = $wix->action_path($path);
+  my $path = $wmc->action_path($path);
 
 The action path is a string which given the site URL and a page name can be
 used to construct the balance of the URL to the action page for that page on
@@ -251,7 +252,7 @@ sub action_path {
 
 =head2 login_path
 
-  my $path = $wix->login_path($path);
+  my $path = $wmc->login_path($path);
 
 The login path is a string which given the site URL and a page name can be
 used to construct the balance of the URL to the login page for that page on
@@ -268,7 +269,7 @@ sub login_path {
 
 =head2 output_level
 
-  my $ol = $wix->output_level(WWW::Mediawiki::Client::INFO);
+  my $ol = $wmc->output_level(WWW::Mediawiki::Client::INFO);
 
 This output level accessor provides for verbosity control.  There are a
 number of different output levels:
@@ -310,7 +311,7 @@ sub output_level {
 
 =head2 commit_message
 
-  my $msg = $wix->commit_message($msg);
+  my $msg = $wmc->commit_message($msg);
 
 A C<commit_message> must be specified before C<do_commit> can be run.  This
 will be used as the comment when submitting pages to the Mediawiki server.
@@ -327,7 +328,7 @@ sub commit_message {
 
 =head2 do_login
 
-  $wix->do_login;
+  $wmc->do_login;
 
 The C<do_login> method operates like the cvs login command.  The
 C<site_url>, C<username>, and C<password> attributes must be set before
@@ -367,7 +368,7 @@ sub do_login {
 
 =head2 do_li
   
-  $wix->do_li;
+  $wmc->do_li;
 
 An alias for C<do_login>.
 
@@ -517,9 +518,9 @@ sub do_com {
 
 =head2 save_state
   
-  $wix->save_state;
+  $wmc->save_state;
 
-Saves the current state of the wix object in the current working directory.
+Saves the current state of the wmc object in the current working directory.
 
 =cut
 
@@ -537,9 +538,9 @@ sub save_state {
 
 =head2 load_state
 
-  $wix = $wix->load_state;
+  $wmc = $wmc->load_state;
 
-Loads the state of the wix object from that saved in the current working
+Loads the state of the wmc object from that saved in the current working
 directory.
 
 =cut
@@ -589,12 +590,14 @@ sub _upload {
     my $url = $self->_filename_to_action_url($filename);
     my $ref = $self->_get_ref_filename($filename);
     my $edit_time = $self->{server_date};
+    my $edit_token = $self->{server_token};
     # take field names from defined constants
     my $textbox = TEXTAREA_NAME;
     my $comment = COMMENT_NAME;
     my $subname = EDIT_SUBMIT_NAME;
     my $subvalue = EDIT_SUBMIT_VALUE;
     my $timename = EDIT_TIME_NAME;
+    my $tokenname = EDIT_TOKEN_NAME;
     my $watchbox = EDIT_WATCH_NAME;
     print { $self->{debug_fh} } " to $url.\n";
     my $res = $self->{ua}->request(POST $url,
@@ -603,6 +606,7 @@ sub _upload {
             $comment    => $self->{commit_message},
             $subname    => $subvalue,
             $timename   => $edit_time,
+            $tokenname   => $edit_token,
             $watchbox   => 1,
         ]
     );
@@ -619,6 +623,7 @@ sub _get_server_page {
     my $doc = $res->content;
     my $text = $self->_get_wiki_text($doc);
     $self->{server_date} = $self->_get_edit_date($doc);
+    $self->{server_token} = $self->_get_edit_token($doc);
     return $text;
 }
 
@@ -643,6 +648,18 @@ sub _get_edit_date {
     return $date;
 }
 
+sub _get_edit_token {
+    my ($self, $doc) = @_;
+    my $p = HTML::TokeParser->new(\$doc);
+    my $token;
+    while (my $tag = $p->get_tag('input')) {
+        next unless $tag->[1]->{type} eq 'hidden';
+        next unless $tag->[1]->{name} eq 'wpEditToken';
+        $token = $tag->[1]->{value};
+    }
+    return $token;
+}
+
 sub _get_local_page {
     my ($self, $filename) = @_;
     print { $self->{debug_fh} } "Loading $filename\n";
@@ -656,9 +673,9 @@ sub _get_local_page {
 
 sub _check_path {
     my ($self, $filename) = @_;
-    confess "wix requires a filename ending in '.wiki'." 
+    die "A filename ending in '.wiki'. is required." 
             unless $filename or ! $filename =~ /\.wiki$/;
-    confess "No absolute filenames allowed!\n"
+    die "No absolute filenames allowed!\n"
             if File::Spec->file_name_is_absolute($filename);
     my ($vol, $dirs, $fn) = File::Spec->splitpath($filename);
     mkdir $dirs;
@@ -746,9 +763,9 @@ __END__
 
 =end comment
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-Mark Jaroski <mark@geekhive.net>
+Mark Jaroski <mark@geekhive.net>, Mike Wisemann <mike@fhi-berlin.mpg.de>
 
 =head1 LICENSE
 
