@@ -103,7 +103,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.wix';
 use constant COOKIE_FILE => '.wix_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.1;
+our $VERSION = 0.14;
 
 =head1 CONSTRUCTORS
 
@@ -136,6 +136,8 @@ sub new {
     $self->password($init{password});
     $self->space_substitute($init{space_substitute});
     $self->{ua} = LWP::UserAgent->new();
+    my $agent = 'WWW::Mediawiki::Client/' . $VERSION;
+    $self->{ua}->agent($agent);
     my $cookie_jar = HTTP::Cookies->new(
         file => COOKIE_FILE,
         autosave => 1,
@@ -609,9 +611,10 @@ sub _upload {
 sub _get_server_page {
     my ($self, $filename) = @_;
     my $url = $self->_filename_to_edit_url($filename);
-    print { $self->{debug_fh} }"Fetching $url";
+    print { $self->{debug_fh} }"Fetching $url\n";
     my $res = $self->{ua}->get($url);
     croak "Couldn't fetch $filename from the server."
+            . "HTTP get failed with: " . $res->code
             unless $res->is_success;
     my $doc = $res->content;
     my $text = $self->_get_wiki_text($doc);

@@ -13,7 +13,8 @@ use Pod::Usage;
 # Fields                                                                     #
 ##############################################################################
 our ( $opt_h, $opt_q, $opt_d, $opt_v, 
-      $opt_m, $opt_u, $opt_p, $opt_s);    # Getopt output
+      $opt_m, $opt_u, $opt_p, $opt_s,
+      $opt_e, $opt_a, $opt_l);    # Getopt output
 our $VERSION = $WWW::Mediawiki::Client::VERSION;
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
@@ -41,7 +42,10 @@ sub main {
     $wix->commit_message($opt_m) if $opt_m;
     $wix->username($opt_u) if $opt_u;
     $wix->password($opt_p) if $opt_p;
-    $wix->space_substitute($opt_s) if ($opt_s);
+    $wix->space_substitute($opt_s) if $opt_s;
+    $wix->action_path($opt_a) if $opt_a;
+    $wix->edit_path($opt_e) if $opt_e;
+    $wix->login_path($opt_l) if $opt_l;
     # run command
     $wix->$method(@_);
 }
@@ -57,7 +61,7 @@ sub VERSION_MESSAGE {
 
 
 # parse command line
-getopts('hqvd:m:u:p:s:');
+getopts('hqvd:m:u:p:s:e:a:l:');
 main (@ARGV);
 
 __END__
@@ -108,6 +112,10 @@ with the editorial, usage, and copyright guidelines of the site.  You
 should probably also make some contributions through the normal UI, and
 learn about following recent changes before contributing using wix.
 
+In addition for the sake of this test you should already have a user page
+like User:<username> with something on it, where <username> is the user
+name with which you estabilished the account.
+
 =head2 Step 2:  Create a working directory
 
 Wix works with mediawiki formatted files with a C<.wiki> extension and
@@ -134,28 +142,31 @@ version of Wikitravel I would use the I<site_url>
 
 Now use the I<site_url> with your username and password to login.
 
-  wix -d http://www.wikitravel.org/en -u Fred -p 'secret' login
+  wix -d http://www.wikitravel.org/en -u <username> -p 'secret' login
 
 Now anything you submit to the Mediawiki server will be credited to user
-"Fred".
+"<username>".
 
 =head2 Step 4:  Use C<wix update> to fetch one or more working files
 
 You can fetch existing material off of the site, or create new pages with
 C<wix update>, remembering that your files will need a C<.wiki> extension:
 
-  wix update Paris.wiki New_York.wiki User:Fred.wiki
+  wix update User:<username>.wiki User:<username>/Test_Page.wiki
 
 This should produce the output:
 
-  U Paris.wiki
-  U New_York.wiki
-  A User:Fred.wiki
+  U User:<username>.wiki
+  A User:<username>/Test_Page.wiki
 
-The U (for Updated) means that Paris and New_York were found on the server
-and their contents inserted into the local files.  The A (for Added) means
-that the User:Fred page does not yet exist on the server, and will be added
-when you run C<wix commit>.
+The U (for Updated) means that User:<username> was found on the server and
+its contents inserted into the local files.  The A (for Added) means that
+the User:<username>/Test_Page.wiki page does not yet exist on the server,
+and will be added when you run C<wix commit>.
+
+Note that both of the pages we are working with are within I<your>
+User Namespace.  It's probably a good idea to restrict yourself to working
+with such pages while you are experimenting with C<wix>
 
 =head2 Step 5:  Edit the files to make corrections and contributions
 
@@ -173,7 +184,7 @@ welcome to create one and submit it to the page above.
 When you are done editing a file and would like to submit your changes to
 the wiki server use C<wix commit> to do so:
 
-  wix -m 'commit message' commit User:Fred.wiki
+  wix -m 'commit message' commit User:<username>.wiki
 
 Where 'commit message' is whatever you want to say about the changes you
 are submitting and why.  You must provide a commit message or C<wix commit>
@@ -320,6 +331,21 @@ Specifies a password for C<wix login>.
 
 A commit message for C<wix commit>.  Use this to explain the nature of your
 changes.
+
+=head2 -e
+
+The mediawiki edit path.  For use with Mediawiki servers which have an
+altered path to a page's edit page.
+
+=head2 -a
+
+The mediawiki action path.  For use with Mediawiki servers which have an
+altered path to a page's action page.
+
+=head2 -l
+
+The mediawiki login path.  For use with Mediawiki servers which have an
+altered path to a page's login page.
 
 =head1 CAVEATS
 

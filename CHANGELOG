@@ -1,3 +1,15 @@
+V. 0.14
+
+    Added debugging code to which proved to be needed to understand the
+    client's interation with Wikipedia.
+
+    Added user agent identification to avoid robot redirects.
+
+V. 0.13
+
+    Changed documentation to suggest that user test wix within their own
+    namespace first.
+
 
 V. 0.12
 
