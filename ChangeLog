@@ -2,6 +2,38 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2004-03-30 08:39:34 GMT	Mark Jaroski <mark@geekhive.net>	patch-13
+
+    Summary:
+      Added the rest of the modules for CPAN test
+    Revision:
+      wix--mainline--0.1--patch-13
+
+    Apparently there are a couple more non-standard modules used here, so I
+    just went ahead and made everything I've used a prereq.  I realise that
+    this is probably overkill because some of these are in the standard
+    distribution.  Oh well.
+
+    modified files:
+     ChangeLog Makefile.PL
+
+
+2004-03-29 19:10:08 GMT	Mark Jaroski <mark@geekhive.net>	patch-12
+
+    Summary:
+      Added dependancy on Test::Differences to avoid CPAN test failure
+    Revision:
+      wix--mainline--0.1--patch-12
+
+    This is a stop-gap to allow these tests to pass on the CPAN auto-test
+    platforms.  At some point I plan to fix the test scripts to either use
+    Test::Differences or not depending on its availablility.
+    
+
+    modified files:
+     ChangeLog Makefile.PL t/wix.t
+
+
 2004-03-25 19:13:00 GMT	Mark Jaroski <mark@geekhive.net>	patch-11
 
     Summary:
