@@ -11,7 +11,8 @@ BEGIN {
 my ($HtmlData, $WikiData, $wix);
 
 # test the constructor first
-ok($wix = WWW::Mediawiki::Client->new(site_url => 'http://localhost/'), 'Can instanciate a WWW::Mediawiki::Client object');
+ok($wix = WWW::Mediawiki::Client->new(site_url => 'http://localhost/'), 
+        'Can instanciate a WWW::Mediawiki::Client object');
 
 # load the test data
 undef $/;
