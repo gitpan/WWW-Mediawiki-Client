@@ -2,6 +2,15 @@
 # arch-tag: automatic-ChangeLog--dev@wikitravel.org--contrib/wix--mainline--0.1
 #
 
+2005-03-04 15:43:12 GMT Mark Jaroski <mark@geekhive.net>
+    Summary:
+      Added proxy support
+    Revision:
+      wix-mainline--0.1--patch-19
+
+      Sven Anders kindly submitted a patch which adds proxy support via an
+      LWP environmental variable.
+
 2005-02-20 21:15:42 GMT Mark Jaroski <mark@geekhive.net>
     Summary:
       Fixed a bug with trying to commit unchanged file

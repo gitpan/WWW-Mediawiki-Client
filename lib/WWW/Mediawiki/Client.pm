@@ -104,7 +104,7 @@ use constant LOGIN_SUBMIT_VALUE => 'Log In';
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 # stuff for perlism
-our $VERSION = 0.22;
+our $VERSION = 0.23;
 
 =head1 CONSTRUCTORS
 
@@ -139,6 +139,7 @@ sub new {
     $self->{ua} = LWP::UserAgent->new();
     my $agent = 'WWW::Mediawiki::Client/' . $VERSION;
     $self->{ua}->agent($agent);
+    $self->{ua}->env_proxy;
     my $cookie_jar = HTTP::Cookies->new(
         file => COOKIE_FILE,
         autosave => 1,
