@@ -1,6 +1,8 @@
 Wix TODOs
 
-This is stuff that needs to be done to wix to make it more useable.
+This is stuff that could be done to wix to make it more useable.
+
+* Since wix can only operate on one file at a time there is now way to easily see which files have been altered locally.  This feature should be added.
 
 * Wix currently always marks pages as watched.  Consider storing the entire
   html file as ref so that we can do this according to the Mediawiki user 

@@ -1,0 +1,10 @@
+
+V. 0.12
+
+    Fixed problem with my arch files which was preventing Makefile.PL from
+    going into the tarball properly.  Duh.
+
+
+V. 0.11
+
+    Added code to cut off update operations in the event of an HTTP error.
