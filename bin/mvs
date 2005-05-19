@@ -3,31 +3,18 @@ use strict;
 use WWW::Mediawiki::Client;
 use Getopt::Std;
 use Pod::Usage;
-
-##############################################################################
-# Constants                                                                  #
-##############################################################################
-use constant WIKITRAVEL_DEFAULTS =>
-          'edit_path' => 'wiki/en/index.php?action=edit&title=',
-          'login_path' => 'wiki/en/index.php?action=submit&title=Special:Userlogin',
-          'action_path' => 'wiki/en/index.php?action=submit&title=',
-          'space_substitute' => '_',
-    ;
-
-use constant WIKIPEDIA_DEFAULTS =>
-          'space_substitute' => '+',
-          'action_path' => 'w/wiki.phtml?action=submit&title=',
-          'edit_path' => 'w/wiki.phtml?action=edit&title=',
-          'login_path' => 'w/wiki.phtml?action=submit&title=Special:Userlogin',
-    ;
+use Data::Dumper;
 
 ##############################################################################
 # Fields                                                                     #
 ##############################################################################
 our ( $opt_h, $opt_q, $opt_d, $opt_v, 
       $opt_m, $opt_u, $opt_p, $opt_s,
-      $opt_e, $opt_a, $opt_l, $opt_M);    # Getopt output
+      $opt_l, $opt_w, $opt_W, $opt_M,
+      $opt_D);    # Getopt output
 our $VERSION = $WWW::Mediawiki::Client::VERSION;
+
+my $LOGFILE = '.mediawiki.errors';
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
@@ -35,49 +22,71 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1;
 # Subroutines                                                                #
 ##############################################################################
 
+sub print_defaults {
+    my $DEFAULTS = WWW::Mediawiki::Client->DEFAULTS;
+    for my $host (keys %$DEFAULTS) {
+        print "Hostname: $host\n";
+        for my $field (keys %{$DEFAULTS->{$host}}) {
+            print "    $field: " . $DEFAULTS->{$host}->{$field} . "\n";
+        }
+        print "\n";
+    }
+    exit 1;
+}
+
 sub main {
-    my $command = shift;
+    my ($command, $file) = @_;
+    print_defaults if $opt_D;
     pod2usage unless $command;
     my $method= "do_$command";
     # do help if indicated
     pod2usage(-verbose => 1) if $opt_h;
     # create the init array, and maybe pre-populate it
-    my @init;
-    @init = WIKIPEDIA_DEFAULTS
-            if $opt_d and $opt_d =~ /^http:\/\/[^\.]*\.wikipedia\.org/;
-    # FIXME: this is a hack which deals with the language versions of
-    # Wikitravel.  What I really should do is to replace the various x_path
-    # fields in the $wmc object with the proper name value pairs from
-    # Mediawiki.
-    if ($opt_d and $opt_d =~ m{^http://www\.wikitravel\.org(/en|/fr|/ro|/sv|/de)*}) {
-        @init = WIKITRAVEL_DEFAULTS;
-        my $lang = $1;
-        if ($lang) {
-            my %init = @init;
-            for (values %init) { s{/en/}{$lang/} };
-            @init = %init;
-            $opt_d = 'http://www.wikitravel.org';
-        }
-    }
-    # instanciate a WWW::Mediawiki::Client obj
-    my $wmc = WWW::Mediawiki::Client->new(@init);
+    my $wmc = WWW::Mediawiki::Client->new();
     unless ($wmc->can($method)) {
         print "Command \"$command\" not supported.\n\n";
         pod2usage(-verbose => 1);
     }
-    $wmc->site_url($opt_d) if $opt_d;
-    $wmc->output_level(WWW::Mediawiki::Client::DEBUG) if $opt_v;
-    $wmc->output_level(WWW::Mediawiki::Client::QUIET) if $opt_q;
+    $wmc->host($opt_d) if $opt_d;
     $wmc->commit_message($opt_m) if $opt_m;
     $wmc->username($opt_u) if $opt_u;
+    $wmc->language_code($opt_l) if $opt_l;
     $wmc->password($opt_p) if $opt_p;
     $wmc->space_substitute($opt_s) if $opt_s;
-    $wmc->action_path($opt_a) if $opt_a;
-    $wmc->edit_path($opt_e) if $opt_e;
-    $wmc->login_path($opt_l) if $opt_l;
+    $wmc->wiki_path($opt_w) if $opt_w;
     $wmc->minor_edit(1) if $opt_M;
+    $wmc->watch(1) if $opt_W;
     # run command
-    $wmc->$method(@_);
+    $file = '' unless $file;
+    my $message = "Doing $command $file with host: " 
+                . $wmc->host . " and lang: "
+                . $wmc->language_code . "\n";
+    my $watch = $wmc->watch ? 'yes' : 'no';
+    my $minor = $wmc->minor_edit ? 'yes' : 'no';
+    $message .= "    wiki_path: " . $wmc->wiki_path . "\n"
+              . "    space_substitute: " . $wmc->space_substitute . "\n"
+              . "    watch this page?: $watch\n" 
+              . "    minor edit?: $minor\n"
+            if $opt_v;
+    print $message unless $opt_q;
+    eval { $wmc->$method($file) };
+    if (UNIVERSAL::isa($@, 'WWW::Mediawiki::Client::Exception')) {
+        open (LOG, ">>$LOGFILE");
+        print LOG "\n-----------------\n$@";
+        warn "\n-----------------\n$@" if $opt_v and ! $opt_q;
+        if ($@->isa('WWW::Mediawiki::Client::LoginException')) {
+            print LOG Data::Dumper->Dump([$@->res], ['res'] ) . "\n";
+            print LOG Data::Dumper->Dump([$@->cookie_jar], ['cookie_jar']) . "\n";
+            close LOG;
+            die $@->error . " See $LOGFILE for details.\n" ;
+        } elsif ($@->isa('WWW::Mediawiki::Client::CommitException')) {
+            print LOG Data::Dumper->Dump([$@->res], ['res']) . "\n";
+        } elsif ($@->isa('WWW::Mediawiki::Client::ServerPageException')) {
+            print LOG Data::Dumper->Dump([$@->res], ['res']) . "\n";
+        }
+        warn $@->error . " See $LOGFILE for details.\n" ;
+    }
+    print $wmc->status . " $file\n" if $wmc->status;
 }
 
 sub HELP_MESSAGE {
@@ -91,7 +100,7 @@ sub VERSION_MESSAGE {
 
 
 # parse command line
-getopts('hqvMd:m:u:p:s:e:a:l:');
+getopts('hqvDMWw:d:m:u:p:s:l:');
 main (@ARGV);
 
 __END__
@@ -106,17 +115,18 @@ mvs - A command line Mediawiki client
 
   mvs -h|--help
   mvs --version
+  mvs -D
 
   mkdir wikistuff
   cd wikistuff
 
-  mvs [-q|-v] [-d <wikihost>] [-u <username>] [-p <password> ] [-l <login_path>] login
+  mvs [-q|-v] [-d <wikihost>] [-l language_code ] [-u <username>] [-p <password> ] [-w <wiki_path>] login
 
   mvs [-q|-v] update [<file> ..]
   mvs [-q|-v] up [<file> ..]
 
-  mvs [-q|-v] -m "commit message" commit [<file> ..]
-  mvs [-q|-v] -m "commit message" com [<file> ..]
+  mvs [-q|-v] [-M] [-W] -m "commit message" commit [<file> ..]
+  mvs [-q|-v] [-M] [-W] -m "commit message" com [<file> ..]
 
 =head1 DESCRIPTION
 
@@ -163,25 +173,34 @@ All of the operations below should be done from this directory.
 
 =head2 Step 3:  Login using C<mvs login>
 
-To use login you will need to know the I<site_url> for the Mediawiki site
-to which you want to contribute.  This will simply be the regular URL for
-the site, with any language path extension.  For instance for the english
-version of Wikitravel I would use the I<site_url>
+To use login you will need to know the I<host>name for the Mediawiki site
+to which you want to contribute.  
 
-  http://www.wikitravel.org/en
+  www.wikitravel.org
 
-Now use the I<site_url> with your username and password to login.
+Now use the I<host> with your username and password to login.
 
-  mvs -d http://www.wikitravel.org/en -u <username> -p 'secret' login
+  mvs -d www.wikitravel.org -u <username> -p 'secret' login
 
-If your mediawiki install uses a nonstandard login path, speciy
-it on login:
+If C<mvs> knows about your mediawiki host it will set set the
+C<wiki_path> to the correct default for that server.  In this case it will
+also be able to select the language version of that Wiki for you if you
+specify a C<language_code>:
+
+  mvs -d www.wikitravel.org -l fr -u <username> -p 'secret' login
+
+The code must match the one which your wiki host uses for a given language,
+and of course the language version must exist for the given host.
+
+If your mediawiki install uses a nonstandard path to the wiki script you
+can specify it on login.  The path to the wiki script is the part of the
+URL after the host name, and before the '?':
 
   mvs \
-    -d http://www.wikitravel.org/en \
+    -d www.wikitravel.org \
     -u <username> \
     -p 'secret' \
-    -l 'mw/wiki.phtml?action=submit&title=Special:Userlogin' \
+    -w 'mw/wiki.phtml' \
     login
 
 You can change the edit and action paths in the created .mediawiki
@@ -189,6 +208,9 @@ file after successful login accordingly.
 
 Now anything you submit to the Mediawiki server will be credited to user
 "<username>".
+
+B<NOTE:> If you have been using an earlier version of C<mvs> you should
+probably delete the .mediawiki file in your working directory.
 
 =head2 Step 4:  Use C<mvs update> to fetch one or more working files
 
@@ -297,17 +319,24 @@ change to the online Wiki page.  If a line has changed in both the online
 page and the local file it is flagged as a conflict, as in CVS, but with a
 slightly differnt syntax:
 
-  >>>>>> http://www.somewiki.org
-  This is the version on the Wiki
-  >>>>>> Paris.wiki
-  This is the local version
-  <<<<<<
+  ********************Start of conflict 1  Insert to Primary, Insert to Secondary ************************************************************
+
+  The line as it appears on the server
+
+  ****************************************************************************************************
+
+  The line as it appears locally
+  ********************End of conflict 1********************************************************************************
 
 C<mvs update> reports the status of files which it touches to stderr with
 a letter indicating the file status, and then name of the file, again like
 CVS.  The status letters are:
 
 =over 4
+
+=item = (Unchanged)
+
+The file is the same as the page on the server.
 
 =item A (Added) 
 
@@ -324,6 +353,10 @@ The file has been updated with changes from the wiki server.
 =item C (Conflicts) 
 
 The file contains conflict markers.
+
+=item ? (Unknown)
+
+Neither the file, nor a cooresponding server page exist.
 
 =back
 
@@ -358,6 +391,10 @@ processed.
 
 Display usage information.
 
+=head2 -D
+
+Print information about known Mediawiki servers, then exit.
+
 =head2 -q
 
 Causes the command to be quiet.  Informational messages are suppressed.
@@ -370,6 +407,11 @@ Specifies a username for C<mvs login>.
 
 Specifies a password for C<mvs login>.
 
+=head2 -l "<language_code>"
+
+The language code the wiki server uses to differentiate between language
+versions.
+
 =head2 -m "<your message>"
 
 A commit message for C<mvs commit>.  Use this to explain the nature of your
@@ -379,21 +421,20 @@ changes.
 
 This is a minor edit.  Use this when commintting a change with C<mvs commit>.
 
-=head2 -e "<edit path>"
+=head2 -W
 
-The mediawiki edit path.  For use with Mediawiki servers which have an
-altered path to a page's edit page.
+Add this page to your watchlist.
 
-=head2 -a "<action path>"
+=head2 -w "<wiki path>"
 
-The mediawiki action path.  For use with Mediawiki servers which have an
-altered path to a page's action page.
+The path on the given C<host> to the mediawiki script.  This defaults to
+I<wiki/wiki.phtml> which is correct for a vanilla install of Mediawiki
+1.4.x.
 
-=head2 -l "<login path>"
+=head2 -v
 
-The mediawiki login path.  For use with Mediawiki servers which have an
-altered path to a page's login page.
-
+Verbose.  If this is set C<mvs> will give you lots of extra information
+about what it's doing.  The -q flag overrides this.
 
 =head1 CAVEATS
 
@@ -401,6 +442,16 @@ This is an early version of this program.  Future versions may have major
 differences which will effect your ability to use them interchangably with
 this one.  In particular the initial "command" arguments may become
 options and the handling of conflicts might change dramatically.
+
+=head1 BUGS
+
+Please submit bug reports to the CPAN bug tracker at
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=WWW-Mediawiki-Client>.
+
+=head1 DISCUSSION
+
+There is a discussion list.  You can subscribe or read the archives at:
+L<http://www.geekhive.net/cgi-bin/mailman/listinfo/www-mediawiki-client-l>
 
 =head1 SEE ALSO
 
@@ -418,7 +469,11 @@ L<http://www.cvs.org|The CVS home page>
 
 =item Bernhard Kaindl <bkaindl@ffii.org>
 
-Improved error handling and usage messages.
+Improved error and usage messages.
+
+=item Oleg Alexandrov <aoleg@math.ucla.edu>, Thomas Widmann <twid@bibulus.org>
+
+Bug reports and feedback.
 
 =head1 COPYRIGHT
 

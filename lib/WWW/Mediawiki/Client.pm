@@ -10,10 +10,9 @@ use HTTP::Request;
 use HTTP::Request::Common;
 use HTTP::Cookies;
 use URI::Escape;
-use Algorithm::Diff qw(diff);
-use Algorithm::Diff::Apply qw(apply_diffs);
-use Carp qw(croak carp confess);
+use VCS::Lite;
 use Data::Dumper;
+use WWW::Mediawiki::Client::Exceptions;
 
 =head1 NAME
 
@@ -26,22 +25,19 @@ WWW::Mediawiki::Client
   use WWW::Mediawiki::Client;
 
   my $filename = 'Subject.wiki';
-  my $wmc = WWW::Mediawiki::Client->new(
-      site_url => 'http://www.wikitravel.org/en'
+  my $mvs = WWW::Mediawiki::Client->new(
+      host => 'www.wikitravel.org'
   );
 
-  # output info messages, but not debug
-  $wmc->set_output_level(WWW::Mediawiki::Client::INFO);
-
   # like cvs update
-  $wmc->do_update($filename);
+  $mvs->do_update($filename);
 
   # like cvs commit
-  $wmc->do_commit($filename, $message);
+  $mvs->do_commit($filename, $message);
 
   #aliases
-  $wmc->do_up($filename);
-  $wmc->do_com($filename, $message);
+  $mvs->do_up($filename);
+  $mvs->do_com($filename, $message);
 
 =cut
 
@@ -50,42 +46,147 @@ WWW::Mediawiki::Client
 WWW::Mediawiki::Client provides a very simple cvs-like interface for
 Mediawiki driven WikiWiki websites, such as
 L<http://www.wikitravel.org|Wikitravel> or
-L<http://www.wikipedia.org|Wikipedia.>  The interface mimics the two most
-basic cvs commands: update and commit with similarly named methods.  Each
-of these has a shorter alias, as in cvs.  Verbosity is controled through an
-output_level accessor method.
+L<http://www.wikipedia.org|Wikipedia.>  
+The interface mimics the two most basic cvs commands: update and commit
+with similarly named methods.  Each of these has a shorter alias, as in
+cvs.  
 
 =cut
 
-##############################################################################
-# Constants                                                                  #
-##############################################################################
-# output level definitions
-use constant QUIET => -1;
-use constant ERROR => 0;
-use constant INFO => 1;
-use constant DEBUG => 2;
-# update status
+=head1 CONSTANTS
+
+=cut
+
+use constant ACTION => 'action';
+
+use constant TITLE => 'title';
+
+use constant SUBMIT => 'submit';
+
+use constant LOGIN => 'submit';
+
+use constant LOGIN_TITLE => 'Special:Userlogin';
+
+use constant EDIT => 'edit';
+
+# defaults for various known Mediawiki installations
+my %DEFAULTS;
+
+$DEFAULTS{'www.wikitravel.org'} =
+    {
+        'host'          => 'www.wikitravel.org',
+        'space_substitute'  => '_',
+        'wiki_path'      => 'wiki/__LANG__/index.php',
+    };
+$DEFAULTS{'wikitravel.org'} = $DEFAULTS{'www.wikitravel.org'};
+
+$DEFAULTS{'www.wikipedia.org'} =
+    {
+        'host'          => '__LANG__.wikipedia.org',
+        'space_substitute'  => '+',
+        'wiki_path'      => 'w/wiki.phtml',
+    };
+$DEFAULTS{'wikipedia.org'} = $DEFAULTS{'www.wikipedia.org'};
+
+$DEFAULTS{'www.wiktionary.org'} = 
+    {
+        'host'          => '__LANG__.wiktionary.org',
+        'space_substitute'  => '_',
+        'wiki_path'      => 'w/wiki.phtml',
+    };
+$DEFAULTS{'wiktionary.org'} = $DEFAULTS{'www.wiktionary.org'};
+
+$DEFAULTS{'www.wikibooks.org'} = 
+    {
+        'host'          => '__LANG__.wikibooks.org',
+        'space_substitute'  => '_',
+        'wiki_path'      => 'w/wiki.phtml',
+    };
+$DEFAULTS{'wikibooks.org'} = $DEFAULTS{'www.wikibooks.org'};
+
+sub DEFAULTS { \%DEFAULTS };
+
+use constant SPACE_SUBSTITUTE => '+';
+use constant WIKI_PATH => 'wiki/wiki.phtml';
+use constant LANGUAGE_CODE => 'en';
+
+=head3 $VERSION 
+
+=cut 
+
+our $VERSION = 0.26;
+
+=head2 Update Status
+
+=head3 STATUS_UNKNOWN
+
+Indicates that C<WWW::Mediawiki::Client> has no information about the file.
+
+=head3 STATUS_UNCHANGED
+
+Indicates that niether the file nor the server page have changed.
+
+=head3 STATUS_LOCAL_ADDED
+
+Indicates that the file is new locally, and does not exist on the server.
+
+=head3 STATUS_LOCAL_MODIFIED
+
+Indicates that the file has been modified locally.
+
+=head3 STATUS_SERVER_MODIFIED
+
+Indicates that the server page was modified, and that the modifications
+have been successfully merged into the local file.
+
+=head3 STATUS_CONFLICT
+
+Indicates that there are conflicts in the local file resulting from a
+failed merge between the server page and the local file.
+
+=cut
+
 use constant STATUS_UNKNOWN         => '?';
-use constant STATUS_ADD             => 'A';
+use constant STATUS_UNCHANGED       => '=';
+use constant STATUS_LOCAL_ADDED     => 'A';
 use constant STATUS_LOCAL_MODIFIED  => 'M';
 use constant STATUS_SERVER_MODIFIED => 'U';
 use constant STATUS_CONFLICT        => 'C';
-# for saving attributes
-use constant SAVED_ATTRIBUTES => (
-    qw(action_path edit_path login_path space_substitute
-       username password site_url output_level)
-);
-# constants which derive from Mediawiki
-use constant URL_SPACE_SUBSTITUTE => '+';
-# URL components
-use constant EDIT_PATH => 
-        'wiki/wiki.phtml?action=edit&title=';
-use constant ACTION_PATH => 
-        'wiki/wiki.phtml?action=submit&title=';
-use constant LOGIN_PATH => 
-        'wiki/wiki.phtml?action=submit&title=Special:Userlogin';
-# edit form widgets
+
+=head2 Mediawiki form widgets
+
+=head3 TEXTAREA_NAME
+
+=head3 COMMENT_NAME
+
+=head3 EDIT_SUBMIT_NAME
+
+=head3 EDIT_SUBMIT_VALUE
+
+=head3 EDIT_TIME_NAME
+
+=head3 EDIT_TOKEN_NAME
+
+=head3 EDIT_WATCH_NAME
+
+=head3 EDIT_MINOR_NAME
+
+=head3 CHECKED
+
+=head3 UNCHECKED
+
+=head3 USERNAME_NAME
+
+=head3 PASSWORD_NAME
+
+=head3 REMEMBER_NAME
+
+=head3 LOGIN_SUBMIT_NAME
+
+=head3 LOGIN_SUBMIT_VALUE
+
+=cut
+
 use constant TEXTAREA_NAME      => 'wpTextbox1';
 use constant COMMENT_NAME       => 'wpSummary';
 use constant EDIT_SUBMIT_NAME   => 'wpSave';
@@ -96,23 +197,43 @@ use constant EDIT_WATCH_NAME    => 'wpWatchthis';
 use constant EDIT_MINOR_NAME    => 'wpMinoredit';
 use constant CHECKED            => 1;
 use constant UNCHECKED          => 0;
-# login form widgets
 use constant USERNAME_NAME      => 'wpName';
 use constant PASSWORD_NAME      => 'wpPassword';
 use constant REMEMBER_NAME      => 'wpRemember';
 use constant LOGIN_SUBMIT_NAME  => 'wpLoginattempt';
 use constant LOGIN_SUBMIT_VALUE => 'Log In';
-# our files
+
+=head2 Files
+
+=head3 CONFIG_FILE
+
+  .mediawiki
+
+=head3 COOKIE_FILE
+
+  .mediawiki.cookies
+
+=head3 SAVED_ATTRIBUTES
+
+Controls which attributes get saved out to the config file.
+
+=cut
+
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
-# stuff for perlism
-our $VERSION = 0.25;
+use constant SAVED_ATTRIBUTES => (
+    qw(site_url host language_code space_substitute username password wiki_path
+       watch minor_edit)
+);  # It's important that host goes first since it has side effects
+
 
 =head1 CONSTRUCTORS
 
+=cut
+
 =head2 new
 
-  my $wmc = WWW::Mediawiki::Client->new(site_url = 'http://www.wikitravel.org');
+  my $mvs = WWW::Mediawiki::Client->new(host = 'www.wikitravel.org');
 
 Accepts name-value pairs which will be used as initial values for any of
 the fields which have accessors below.  Throws the same execptions as the
@@ -124,20 +245,11 @@ sub new {
     my $pkg = shift;
     my %init = @_;
     my $self = bless {};
-    $self->output_level(INFO);
-    $self->edit_path(EDIT_PATH);
-    $self->action_path(ACTION_PATH);
-    $self->login_path(LOGIN_PATH);
-    $self->space_substitute(URL_SPACE_SUBSTITUTE);
     $self->load_state;
-    $self->output_level($init{output_level});
-    $self->site_url($init{site_url});
-    $self->edit_path($init{edit_path});
-    $self->action_path($init{action_path});
-    $self->login_path($init{login_path});
-    $self->username($init{username});
-    $self->password($init{password});
-    $self->space_substitute($init{space_substitute});
+    foreach my $attr (SAVED_ATTRIBUTES) {
+        next unless $init{$attr};
+        $self->$attr($init{$attr});
+    }
     $self->{ua} = LWP::UserAgent->new();
     my $agent = 'WWW::Mediawiki::Client/' . $VERSION;
     $self->{ua}->agent($agent);
@@ -148,29 +260,79 @@ sub new {
     );
     $self->{ua}->cookie_jar($cookie_jar);
     return $self;
-};
+}
 
 =head1 ACCESSORS
 
-=head2 site_url
+=cut
 
-  my $url = $wmc->site_url($url);
+=head2 host
 
-The site URL is the base url for reaching the Mediawiki server who's
-content you wish to edit.  There is no default.  This has to be set before
-attempting to use any of the methods which attempt to access the server.
+  my $url = $mvs->host('www.wikipediea.org');
+
+  my $url = $mvs->host('www.wikitravel.org');
+
+The C<host> is the name of the Mediawiki server from which you want to
+obtain content, and to which your submissions will be made.  There is no
+default.  This has to be set before attempting to use any of the methods
+which attempt to access the server.
+
+B<Side Effects:>
+
+=over 4
+
+=item Server defaults
+
+If WWW::Mediawiki::Client knows about the path settings for the Mediawiki
+installation you are trying to use then the various path fields will also
+be set as a side-effect.
+
+=item Trailing slashes
+
+Any trailing slashes are deleted I<before> the value of C<host> is set.
+
+=back
 
 =cut
 
-sub site_url {
-    my ($self, $site_url) = @_;
-    $self->{site_url} = $site_url if $site_url;
-    return $self->{site_url};
+sub host {
+    my ($self, $host) = @_;
+    if ($host) {
+        $host =~ s{/*$}{}; # remove any trailing /s
+        $self->{host} = $host;
+        my $defaults = $DEFAULTS{$host};
+        foreach my $k (keys %$defaults) {
+            $self->{$k} = $defaults->{$k};
+        }
+    }
+    return $self->{host};
 }
 
-=head2 site_url
+=head2 language_code
 
-  my $char = $wmc->space_substitute($char);
+  my $lang = $mvs->language_code($lang);
+
+Most Mediawiki projects have multiple language versions.  This field can be
+set to target a particular language version of the project the client is
+set up to address.  When the C<filename_to_url> and C<pagename_to_url> methods
+encounter the text '__LANG__' in any part of their constructed URL the
+C<language_code> will be substituted.
+
+C<language_code> defaults to 'en'.
+
+=cut
+
+sub language_code {
+    my ($self, $char) = @_;
+    $self->{language_code} = $char if $char;
+    $self->{language_code} = LANGUAGE_CODE 
+            unless $self->{language_code};
+    return $self->{language_code};
+}
+
+=head2 space_substitute
+
+  my $char = $mvs->space_substitute($char);
 
 Mediawiki allows article names to have spaces, for instance the default
 Meidawiki main page is called "Main Page".  The spaces need to be converted
@@ -180,17 +342,66 @@ uses a '+', as in "Main+Page" and Wikitravel uses a '_' as in "Main_page".
 WWW::Mediawiki::Client always writes wiki files using the '_', but converts
 them to whatever the C<space_substitute> is set to for the URL.
 
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::URLConstructionException
+
+=back
+
 =cut
 
 sub space_substitute {
     my ($self, $char) = @_;
-    $self->{space_substitute} = $char if $char;
+    if ($char) {
+        WWW::Mediawiki::Client::URLConstructionException->throw(
+                "Illegal Character in space_substitute $char" )
+            if $char =~ /[\&\?\=\\\/]/;
+        $self->{space_substitute} = $char;
+    }
+    $self->{space_substitute} = SPACE_SUBSTITUTE 
+            unless $self->{space_substitute};
     return $self->{space_substitute};
+}
+
+=head2 wiki_path
+
+  my $path = $mvs->wiki_path($path);
+
+C<wiki_path> is the path to the php page which handles all request to
+edit or submit a page, or to login.  If you are using a Mediawiki site
+which WWW::Mediawiki::Client knows about this will be set for you when you
+set the C<host>.  Otherwise it defaults to the 'wiki/wiki.phtml' which is
+what you'll get if you follow the installation instructions that some with
+Mediawiki.
+
+B<Side effects>
+
+=over
+
+=item Leading slashes
+
+Leading slashes in any incoming value will be stripped.
+
+=back
+
+=cut
+
+sub wiki_path {
+    my ($self, $wiki_path) = @_;
+    if ($wiki_path) {
+        $wiki_path =~ s{^/*}{}; # strip leading slashes
+        $self->{wiki_path} = $wiki_path;
+    }
+    $self->{wiki_path} = WIKI_PATH 
+            unless $self->{wiki_path};
+    return $self->{wiki_path};
 }
 
 =head2 username
 
-  my $url = $wmc->username($url);
+  my $url = $mvs->username($url);
 
 The username to use if WWW::Mediawiki::Client is to log in to the Mediawiki server as a given
 user.
@@ -205,7 +416,7 @@ sub username {
 
 =head2 password
 
-  my $url = $wmc->password($url);
+  my $url = $mvs->password($url);
 
 The password to use if WWW::Mediawiki::Client is to log in to the Mediawiki server as a given
 user.  Note that this password is sent I<en clair>, so it's probably not a
@@ -219,102 +430,9 @@ sub password {
     return $self->{password};
 }
 
-=head2 edit_path
-
-  my $path = $wmc->edit_path($path);
-
-The edit path is a string which given the site URL and a page name can be
-used to construct the balance of the URL to the edit page for that page on
-the wikimedia server.  You shouldn't have to worry about this unless the
-Mediawiki software on your server has been altered or is very out-of-date.
-
-=cut
-
-sub edit_path {
-    my ($self, $edit_path) = @_;
-    $self->{edit_path} = $edit_path if $edit_path;
-    return $self->{edit_path};
-}
-
-=head2 action_path
-
-  my $path = $wmc->action_path($path);
-
-The action path is a string which given the site URL and a page name can be
-used to construct the balance of the URL to the action page for that page on
-the wikimedia server.  You shouldn't have to worry about this unless the
-Mediawiki software on your server has been altered or is very out-of-date.
-
-=cut
-
-sub action_path {
-    my ($self, $action_path) = @_;
-    $self->{action_path} = $action_path if $action_path;
-    return $self->{action_path};
-}
-
-=head2 login_path
-
-  my $path = $wmc->login_path($path);
-
-The login path is a string which given the site URL and a page name can be
-used to construct the balance of the URL to the login page for that page on
-the wikimedia server.  You shouldn't have to worry about this unless the
-Mediawiki software on your server has been altered or is very out-of-date.
-
-=cut
-
-sub login_path {
-    my ($self, $login_path) = @_;
-    $self->{login_path} = $login_path if $login_path;
-    return $self->{login_path};
-}
-
-=head2 output_level
-
-  my $ol = $wmc->output_level(WWW::Mediawiki::Client::INFO);
-
-This output level accessor provides for verbosity control.  There are a
-number of different output levels:
-
-=over
-
-=item WWW::Mediawiki::Client::QUIET
-
-=item WWW::Mediawiki::Client::ERROR
-
-=item WWW::Mediawiki::Client::INFO
-
-=item WWW::Mediawiki::Client::DEBUG
-
-=back
-
-=cut
-
-sub output_level {
-    my ($self, $ol) = @_;
-    return $self->{output_level} unless $ol;
-    my $null = File::Spec->devnull;
-    eval {
-        open $self->{debug_fh}, ">$null";
-        open $self->{info_fr}, ">$null";
-        open $self->{error_fh}, ">$null";
-    } or confess "Couldn't open $null.";
-    open $self->{debug_fh}, ">&STDERR"
-            or confess "Couldn't dup STDERR."
-            if $ol >= DEBUG;
-    open $self->{info_fh}, ">&STDERR"
-            or confess "Couldn't dup STDERR."
-            if $ol >= INFO;
-    open $self->{error_fh}, ">&STDERR"
-            or confess "Couldn't dup STDERR."
-            if $ol >= ERROR;
-    return $self->{output_level} = $ol;
-};
-
 =head2 commit_message
 
-  my $msg = $wmc->commit_message($msg);
+  my $msg = $mvs->commit_message($msg);
 
 A C<commit_message> must be specified before C<do_commit> can be run.  This
 will be used as the comment when submitting pages to the Mediawiki server.
@@ -327,9 +445,27 @@ sub commit_message {
     return $self->{commit_message};
 }
 
+=head2 watch
+
+  my $bool = $mvs->watch($bool);
+
+Mediawiki allows users to add a page to thier watchlist at submit time
+using using the "Watch this page" checkbox.  The field C<watch> allows
+commits from this library to add or remove the page in question to/from
+your watchlist.
+
+=cut
+
+sub watch {
+    my ($self, $m) = @_;
+    $self->{watch} = $m if $m;
+    $self->{watch} = 0 unless defined $self->{watch};
+    return $self->{watch};
+}
+
 =head2 minor_edit
 
-  my $bool = $wmc->minor_edit($bool);
+  my $bool = $mvs->minor_edit($bool);
 
 Mediawiki allows users to mark some of their edits as minor using the "This
 is a minor edit" checkbox.  The field C<minor_edit> allows a commit from
@@ -340,66 +476,163 @@ the mediawiki client to be marked as a minor edit.
 sub minor_edit {
     my ($self, $m) = @_;
     $self->{minor_edit} = $m if $m;
+    $self->{minor_edit} = 0 unless defined $self->{minor_edit};
     return $self->{minor_edit};
+}
+
+=head2 status
+
+  my $status = $mvs->status;
+
+This field will be C<undef> until do_update has been called, after which it
+will be set to one of the following (see CONSTANTS for discriptions):
+
+=item WWW::Mediawiki::Client::STATUS_UNKNOWN;
+
+=item WWW::Mediawiki::Client::STATUS_UNCHANGED;
+
+=item WWW::Mediawiki::Client::STATUS_LOCAL_ADDED;
+
+=item WWW::Mediawiki::Client::STATUS_LOCAL_MODIFIED;
+
+=item WWW::Mediawiki::Client::STATUS_SERVER_MODIFIED;
+
+=item WWW::Mediawiki::Client::STATUS_CONFLICT;
+
+=cut
+
+sub status {
+    my ($self, $arg) = @_;
+    WWW::Mediawiki::Client::ReadOnlyFieldException->throw(
+            "Tried to set read-only field 'status' to $arg.") if $arg;
+    return $self->{status};
+}
+
+=head2 site_url DEPRICATED
+
+  my $url = $mvs->site_url($url);
+
+The site URL is the base url for reaching the Mediawiki server who's
+content you wish to edit.  This field is now depricated in favor of the
+C<host> field which is basically the same thing without the protocol
+string.
+
+
+B<Side Effects:>
+
+=over 4
+
+=item Server defaults
+
+If WWW::Mediawiki::Client knows about the path settings for the Mediawiki
+installation you are trying to use then the various path fields will also
+be set as a side-effect.
+
+=item Trailing slashes
+
+Any trailing slashes are deleted I<before> the value of C<site_url> is set.
+
+=back
+
+=cut
+
+sub site_url {
+    my ($self, $host) = @_;
+    my ($pkg, $caller, $line) = caller;
+    warn "Using depricated method 'site_url' at $caller line $line."
+            unless $pkg =~ "WWW::Mediawiki::Client";
+    $host =~ s{^http://}{} if $host;
+    $host = $self->host($host);
+    return "http://" . $host if $host;
 }
 
 =head1 Instance Methods
 
+=cut
+
 =head2 do_login
 
-  $wmc->do_login;
+  $mvs->do_login;
 
 The C<do_login> method operates like the cvs login command.  The
-C<site_url>, C<username>, and C<password> attributes must be set before
+C<host>, C<username>, and C<password> attributes must be set before
 attempting to login.  Once C<do_login> has been called successfully any
 successful commit from the same directory will be logged in the Mediawiki
 server as having been done by C<username>.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::AuthException
+
+=item WWW::Mediawiki::Client::CookieJarException
+
+=item WWW::Mediawiki::Client::LoginException
+
+=item WWW::Mediawiki::Client::URLConstructionException
+
+=back
 
 =cut
 
 sub do_login {
     my $self = shift;
-    croak "No server URL specified." unless $self->{site_url};
-    croak "Must have username and password to login."
-            unless $self->{username} && $self->{password};
-    print { $self->{info_fh} } 
-            "Logging in as " . $self->{username} . "\n";
-    my $url = $self->{site_url} . '/' . $self->{login_path};
-    my $username_tag = USERNAME_NAME;
-    my $password_tag = PASSWORD_NAME;
-    my $remember_tag = REMEMBER_NAME;
-    my $submit_tag = LOGIN_SUBMIT_NAME;
-    my $submitval = LOGIN_SUBMIT_VALUE;
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            "No Mediawiki host specified.")
+            unless $self->host;
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            "No wiki_path specified.")
+            unless $self->wiki_path;
+    WWW::Mediawiki::Client::AuthException->throw(
+        "Must have username and password to login.")
+            unless $self->username && $self->password;
+    my $host = $self->host;
+    my $path = $self->wiki_path;
+    my $lang = $self->language_code;
+    $host =~ s/__LANG__/$lang/;
+    $path =~ s/__LANG__/$lang/;
+    my $url = "http://$host/$path"
+            . "?" . ACTION . "=" . LOGIN
+            . "&" . TITLE  . "=" . LOGIN_TITLE;
+    $self->{ua}->cookie_jar->clear;
+    $self->{ua}->cookie_jar->save
+            or WWW::Mediawiki::Client::CookieJarException->throw(
+            "Could not save cookie jar.");
     my $res = $self->{ua}->request(POST $url,
         [ 
-            $username_tag   => $self->{username},
-            $password_tag   => $self->{password},
-            $remember_tag   => 1,
-            $submit_tag     => $submitval,
+            &USERNAME_NAME      => $self->username,
+            &PASSWORD_NAME      => $self->password,
+            &REMEMBER_NAME      => 1,
+            &LOGIN_SUBMIT_NAME  => &LOGIN_SUBMIT_VALUE,
         ]
     );
-    if ($res->is_success) {
-	print $self->{error_fh}, "Login did not work, please check host, login path, user and password.\n";
+    # success == Mediawiki gave us a Password cookie
+    if ($self->{ua}->cookie_jar->as_string =~ /UserID=/) {
+        $self->save_state;
+        $self->{ua}->cookie_jar->save
+                or WWW::Mediawiki::Client::CookieJarException->throw(
+                "Could not save cookie jar.");
         return $self;
+    } elsif ($res->is_success) {  # got a page, but not what we wanted
+        WWW::Mediawiki::Client::LoginException->throw(
+                error => "Login did not work, please check username and password.\n",
+                res => $res,
+                cookie_jar => $self->{ua}->cookie_jar,
+            );
+    } else { # something else went wrong, send all the data in exception
+        my $err = "Login to $url failed.";
+        WWW::Mediawiki::Client::LoginException->throw(
+                error => $err, 
+                res => $res,
+                cookie_jar => $self->{ua}->cookie_jar,
+            );
     }
-    if ($res->code != 302) {
-        print $self->{error_fh}, "Login to ", $url, " failed\n";
-        print $self->{error_fh}, "Error code: ", $res->status_line, "\n";
-        if ($res->code == 400) {
-		print $self->{info_fh}, "Tip: If the hostname didn't start with 'http://' add it.\n";
-        }
-        return $self;
-    }
-    print { $self->{debug_fh} } "Saving cookie jar.\n";
-    $self->{ua}->cookie_jar->save
-            or croak "Could not save cookie jar.";
-    $self->save_state;
-    return $self;
 }
 
 =head2 do_li
   
-  $wmc->do_li;
+  $mvs->do_li;
 
 An alias for C<do_login>.
 
@@ -420,13 +653,16 @@ reference copy.  Lines which have changed only in the server version will
 be merged into the local version, while lines which have changed in both
 the server and local version will be flagged as possible conflicts, and
 marked as such, somewhate in the manner of cvs (actually this syntax comes
-from the default conflict behavior of Algorithm::Diff::Apply):
+from the default conflict behavior of VCS::Lite):
 
-  >>>>>> http://server.somewiki.org/en
+  ********************Start of conflict 1  Insert to Primary, Insert to Secondary ************************************************************
+
   The line as it appears on the server
-  >>>>>> Filename.wiki
+
+  ****************************************************************************************************
+
   The line as it appears locally
-  <<<<<<
+  ********************End of conflict 1********************************************************************************
 
 After the merging, and conflict marking is complete the server version will
 be copied into the reference version.
@@ -439,7 +675,15 @@ B<Throws:>
 
 =over
 
-=item CouldNotGetServerVersion
+=item WWW::Mediawiki::Client::URLConstructionException
+
+=item WWW::Mediawiki::Client::FileAccessException
+
+=item WWW::Mediawiki::Client::FileTypeException
+
+=item WWW::Mediawiki::Client::ServerPageException
+
+=item WWW::Mediawiki::Client::AbsoluteFileNameException
 
 =back
 
@@ -448,25 +692,38 @@ B<Throws:>
 sub do_update {
     my $self = shift;
     my $filename = shift;
-    croak "No server URL specified." unless $self->{site_url};
-    print { $self->{debug_fh} } "Updating: $filename\n";
-    $self->_check_path($filename);
-    my $sv = $self->_get_server_page($filename);
-    my $lv = $self->_get_local_page($filename);
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            "No server URL specified.") unless $self->{host};
+    my ($vol, $dirs, $fn) = $self->_check_path($filename);
+    my $sv = $self->get_server_page($self->filename_to_pagename($filename));
+    my $lv = $self->get_local_page($filename);
     my $rv = $self->_get_reference_page($filename);
     my $nv = $self->_merge($filename, $rv, $sv, $lv);
-    my $status = $self->_get_update_status($rv, $sv, $lv, $nv);
-
-    # save the new merged version as our local copy
-    return unless $status;  # nothing changes, nothing to do
-    return if $status eq STATUS_ADD;
-    open OUT, ">$filename" or confess "Cannot open $filename for writing.";
+    $self->{status} = $self->_get_update_status($rv, $sv, $lv, $nv);
+    return unless $self->{status};  # nothing changes, nothing to do
+    return $self->{status} 
+            if $self->{status} eq STATUS_LOCAL_ADDED
+                or $self->{status} eq STATUS_UNKNOWN
+                or $self->{status} eq STATUS_UNCHANGED;
+    # save the newly retrieved and/or merged version as our local copy
+    my @dirs = split '/', $dirs;
+    for my $d (@dirs) {
+        mkdir $d;
+        chdir $d;
+    }
+    for (@dirs) {
+        chdir '..';
+    }
+    open OUT, ">$filename" or WWW::Mediawiki::Client::FileAccessException->throw(
+            "Cannot open $filename for writing.");
     print OUT $nv;
     # save the server version out as the reference file
     $filename = $self->_get_ref_filename($filename);
-    open OUT, ">$filename" or confess "Cannot open $filename for writing.";
+    open OUT, ">$filename" or WWW::Mediawiki::Client::FileAccessException->throw(
+            "Cannot open $filename for writing.");
     print OUT $sv;
     close OUT;
+    return $self->{status};
 }
 
 =head2 do_up
@@ -498,41 +755,74 @@ B<Throws:>
 
 =over
 
-=item UpdateNeeded
+=item WWW::Mediawiki::Client::CommitMessageException
 
-=item ConflictsPresent
+=item WWW::Mediawiki::Client::ConflictsPresentException
 
-=item CouldNotGetServerVersion
+=item WWW::Mediawiki::Client::FileAccessException
 
-=item UploadFailed
+=item WWW::Mediawiki::Client::FileTypeException
+
+=item WWW::Mediawiki::Client::URLConstructionException
+
+=item WWW::Mediawiki::Client::UpdateNeededException
 
 =back
 
 =cut
 
 sub do_commit {
-    my $self = shift;
-    my $filename = shift;
-    croak "No commit message specified" 
-            unless $self->{commit_message};
-    croak "No server URL specified." unless $self->{site_url};
-    print { $self->{info_fh} } "commiting $filename\n";
-    croak "No such file!" unless -e $filename;
-    my $lv = $self->_get_local_page($filename);
-    my $sv = $self->_get_server_page($filename);
-    my $rv = $self->_get_reference_page($filename);
-    chomp ($lv, $sv, $rv);
-    return if $sv eq $lv;
-    croak "$filename has changed on the server. "
-            ."Please do an update and try again"
-            unless $sv eq $rv;
-    croak "$filename appears to have unresolved conflicts"
-            if $self->_conflicts_found_in($lv);
-    $self->_upload($filename, $lv);
+    my ($self, $filename) = @_;
+    WWW::Mediawiki::Client::CommitMessageException->throw(
+            "No commit message specified")
+        unless $self->{commit_message};
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            "No server URL specified.") unless $self->{host};
+    WWW::Mediawiki::Client::FileAccessException->throw("No such file!") 
+        unless -e $filename;
+    my $text = $self->get_local_page($filename);
+    my $pagename = $self->filename_to_pagename($filename);
+    my $sp = $self->get_server_page($pagename);
+    my $ref = $self->_get_reference_page($filename);
+    chomp ($text, $sp, $ref);
+    WWW::Mediawiki::Client::UpdateNeededException->throw(
+            error => $self->filename_to_pagename($filename) 
+                   . " has changed on the server.",
+        ) unless $sp eq $ref;
+    WWW::Mediawiki::Client::ConflictsPresentException->throw(
+            "$filename appears to have unresolved conflicts")
+        if $self->_conflicts_found_in($text);
+    my $minorbox = $self->{minor_edit} ? EDIT_MINOR_NAME : '';
+    my $watchbox = $self->{watch} ? EDIT_WATCH_NAME : '';
+    my $url = $self->filename_to_url($filename, SUBMIT);
+    my $res = $self->{ua}->request(POST $url,
+        [ 
+            &TEXTAREA_NAME      => $text,
+            &COMMENT_NAME       => $self->{commit_message},
+            &EDIT_SUBMIT_NAME   => &EDIT_SUBMIT_VALUE,
+            &EDIT_TIME_NAME     => $self->{server_date},
+            &EDIT_TOKEN_NAME    => $self->{server_token},
+            $watchbox           => $self->{watch} ? CHECKED : UNCHECKED,
+            $minorbox           => $self->{minor_edit} ? CHECKED : UNCHECKED,
+        ]
+    );
+    my $doc = $res->content;
+    my $headline = $self->_get_page_headline($doc);
+    unless (lc($headline) eq lc($pagename)) {
+        WWW::Mediawiki::Client::CommitException->throw(
+	        error => "The page you are trying to commit appears to contain a link which is associated with Wikispam.",
+                res   => $res,
+            ) if ($headline eq 'Spam protection filter');
+        WWW::Mediawiki::Client::CommitException->throw(
+	        error => "When we tried to commit '$pagename' the server responded with '$headline'.",
+                res   => $res,
+            ) if ($headline);
+    }
     # save the local version as the reference version
-    $filename = $self->_get_ref_filename($filename);
-    open OUT, ">$filename" or die "Cannot open $filename for writing.";
-    print OUT $lv;
+    my $refname = $self->_get_ref_filename($filename);
+    open OUT, ">$refname" or WWW::Mediawiki::Client::FileAccessException->throw(
+            "Cannot open $refname for writing.");
+    print OUT $text;
     close OUT;
 }
 
@@ -548,9 +838,17 @@ sub do_com {
 
 =head2 save_state
   
-  $wmc->save_state;
+  $mvs->save_state;
 
 Saves the current state of the wmc object in the current working directory.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::FileAccessException
+
+=back
 
 =cut
 
@@ -559,33 +857,39 @@ sub save_state {
     my $conf = CONFIG_FILE;
     my %init;
     foreach my $attr (SAVED_ATTRIBUTES) {
-        $init{$attr} = $self->{$attr};
+        $init{$attr} = $self->$attr;
     }
-    open OUT, ">$conf" or croak "Cannot write to config file.";
+    open OUT, ">$conf" or WWW::Mediawiki::Client::FileAccessException->throw(
+            "Cannot write to config file, $conf.");
     print OUT Dumper(\%init);
     close OUT;
 }
 
 =head2 load_state
 
-  $wmc = $wmc->load_state;
+  $mvs = $mvs->load_state;
 
 Loads the state of the wmc object from that saved in the current working
 directory.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::CorruptedConfigFileException
+
+=back
 
 =cut
 
 sub load_state {
     my $self = shift;
-    my $conffile = CONFIG_FILE;
-    return $self unless -e $conffile;
-    my $VAR1;
-    local $/;
-    open IN, $conffile or croak "Could not open config";
-    my $config = <IN>;
-    close IN;
-    eval $config
-            or croak "Could not read corrupted config file: $config.";
+    my $config = CONFIG_FILE;
+    return $self unless -e $config;
+    our $VAR1;
+    do $config or 
+            WWW::Mediawiki::Client::CorruptedConfigFileException->throw(
+            "Could not read config file: $config.");
     my %init = %$VAR1;
     foreach my $attr (SAVED_ATTRIBUTES) {
         $self->$attr($init{$attr});
@@ -593,6 +897,225 @@ sub load_state {
     return $self;
 }
 
+=head2 get_server_page
+
+  my $wikitext = $mvs->get_server_page($pagename);
+
+Returns the wikitext of the given Mediawiki page name.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::ServerPageException
+
+=back
+
+=cut
+
+sub get_server_page {
+    my ($self, $pagename) = @_;
+    my $url = $self->pagename_to_url($pagename, EDIT);
+    my $res = $self->{ua}->get($url);
+    WWW::Mediawiki::Client::ServerPageException->throw(
+            error => "Couldn't fetch \"$pagename\" from the server.",
+            res => $res,
+        ) unless $res->is_success;
+    my $doc = $res->content;
+    my $text = $self->_get_wiki_text($doc);
+    $self->{server_date} = $self->_get_edit_date($doc);
+    $self->{server_token} = $self->_get_edit_token($doc);
+    my $headline = $self->_get_page_headline($doc);
+    my $expected = lc $pagename;
+    unless (lc($headline) =~ /$expected$/) {
+        WWW::Mediawiki::Client::ServerPageException->throw(
+	        error => "The server could not resolve the page name
+                        '$pagename', but responded that it was '$headline'.",
+                res   => $res,
+            ) if ($headline && $headline =~ /^Editing /);
+        WWW::Mediawiki::Client::ServerPageException->throw(
+	        error => "Error message from the server: '$headline'.",
+                res   => $res,
+            ) if ($headline);
+        WWW::Mediawiki::Client::ServerPageException->throw(
+                error => "Could not identify the error in this context.",
+                res   => $res,
+            );
+    }
+    chomp $text;
+    return $text;
+}
+
+=head2 get_local_page
+
+  my $wikitext = $mvs->get_local_page($filename);
+
+Returns the wikitext from the given local file;
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::FileAccessException
+
+=item WWW::Mediawiki::Client::FileTypeException
+
+=item WWW::Mediawiki::Client::AbsoluteFileNameException 
+
+=back
+
+=cut
+
+sub get_local_page {
+    my ($self, $filename) = @_;
+    $self->_check_path($filename);
+    return '' unless -e $filename;
+    open IN, $filename or 
+            WWW::Mediawiki::Client::FileAccessException->throw(
+            "Cannot open $filename.");
+    local $/;
+    my $text = <IN>;
+    close IN;
+    return $text;
+}
+
+=head2 pagename_to_url
+
+  my $url = $mvs->pagename_to_url($pagename);
+
+Returns the url at which a given pagename will be found on the Mediawiki
+server to which this instance of points.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::URLConstructionException;
+
+=back
+
+=cut
+
+sub pagename_to_url {
+    my ($self, $name, $action) = @_;
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            error => 'No action supplied.',
+        ) unless $action;
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            error => "Page name $name ends with '.wiki'.",
+        ) if $name =~ /.wiki$/;
+    my $char = $self->space_substitute;
+    $name =~ s/ /$char/;
+    my $lang = $self->language_code;
+    my $host = $self->host;
+    $host =~ s/__LANG__/$lang/g;
+    my $wiki_path = $self->wiki_path;
+    $wiki_path =~ s/__LANG__/$lang/g;
+    return "http://$host/$wiki_path?" . ACTION . "=$action&" . TITLE . "=$name";
+}
+
+=head2 filename_to_pagename
+
+  my $pagename = $mvs->filname_to_pagename($filename);
+
+Returns the cooresponding server page name given a filename.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::AbsoluteFileNameException
+
+=item WWW::Mediawiki::Client::FileTypeException 
+
+=back
+
+=cut
+
+sub filename_to_pagename {
+    my ($self, $name) = @_;
+    $self->_check_path($name);
+    $name =~ s/.wiki$//;
+    $name =~ s/_/ /g;
+    return ucfirst $name;
+}
+
+=head2 filename_to_url
+
+  my $pagename = $mvs->filname_to_url($filename);
+
+Returns the cooresponding server URL given a filename.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::AbsoluteFileNameException
+
+=item WWW::Mediawiki::Client::FileTypeException 
+
+=back
+
+=cut
+
+sub filename_to_url {
+    my ($self, $name, $action) = @_;
+    $name = $self->filename_to_pagename($name);
+    return $self->pagename_to_url($name, $action);
+}
+
+=head2 pagename_to_filename
+
+  my $filename = $mvs->pagename_to_filename($pagename);
+
+Returns a local filename which cooresponds to the given Mediawiki page
+name.
+
+=cut
+
+sub pagename_to_filename {
+    my ($self, $name) = @_;
+    $name =~ s/ /_/;
+    $name .= '.wiki';
+    return $name;
+}
+
+=head2 url_to_filename
+  
+  my $filename = $mvs->url_to_filename($url);
+
+Returns the local filename which cooresponds to a given URL.
+
+=cut
+
+sub url_to_filename {
+    my ($self, $url) = @_;
+    my $char = '\\' . $self->space_substitute;
+    $url =~ s/$char/_/g;
+    $url =~ m/&title=([^&]*)/;
+    return "$1.wiki";
+}
+
+=head2 list_wiki_files
+
+  @filenames = $mvs->list_wiki_files;
+
+Returns a recursive list of all wikitext files in the local repository.
+
+=cut
+
+sub list_wiki_files {
+    my $self = shift;
+    my @files;
+    my $dir = File::Spec->curdir();
+    find(sub { 
+        return unless /^[^.].*\.wiki\z/s;
+        my $name = $File::Find::name;
+        $name = File::Spec->abs2rel($name);
+        push @files, $name;
+    }, $dir);
+    return @files;
+}
 
 =begin comment
 
@@ -602,69 +1125,10 @@ sub load_state {
 
 sub _merge {
     my ($self, $filename, $ref, $server, $local) = @_;
-    my @r = split /\n/, $ref;
-    my @s = split /\n/, $server;
-    my @l = split /\n/, $local;
-    my $sdiff = diff(\@r, \@s);
-    my $ldiff = diff(\@r, \@l);
-    my @merged = apply_diffs(\@r,
-        $self->site_url()   => $sdiff,
-        $filename           => $ldiff,
-    );
-    return join "\n", @merged;
-}
-
-sub _upload {
-    my ($self, $filename, $text) = @_;
-    print { $self->{debug_fh} } "Sending $filename";
-    my $url = $self->_filename_to_action_url($filename);
-    my $ref = $self->_get_ref_filename($filename);
-    my $edit_time = $self->{server_date};
-    my $edit_token = $self->{server_token};
-    my $minor_edit = $self->{minor_edit} ? CHECKED : UNCHECKED;
-    # take field names from defined constants
-    my $textbox = TEXTAREA_NAME;
-    my $comment = COMMENT_NAME;
-    my $subname = EDIT_SUBMIT_NAME;
-    my $subvalue = EDIT_SUBMIT_VALUE;
-    my $timename = EDIT_TIME_NAME;
-    my $tokenname = EDIT_TOKEN_NAME;
-    my $watchbox = EDIT_WATCH_NAME;
-    my $minorbox = $self->{minor_edit} ? EDIT_MINOR_NAME : '';
-    print { $self->{debug_fh} } " to $url.\n";
-    my $res = $self->{ua}->request(POST $url,
-        [ 
-            $textbox    => $text,
-            $comment    => $self->{commit_message},
-            $subname    => $subvalue,
-            $timename   => $edit_time,
-            $tokenname  => $edit_token,
-            $watchbox   => 1,
-            $minorbox   => $minor_edit,
-        ]
-    );
-}
-
-sub _get_server_page {
-    my ($self, $filename) = @_;
-    my $url = $self->_filename_to_edit_url($filename);
-    print { $self->{debug_fh} }"Fetching $url\n";
-    my $res = $self->{ua}->get($url);
-    croak "Couldn't fetch \"$filename\" from the server."
-            . "\nHTTP get failed with: " . $res->status_line
-            unless $res->is_success;
-    my $doc = $res->content;
-    my $text = $self->_get_wiki_text($doc);
-    $self->{server_date} = $self->_get_edit_date($doc);
-    $self->{server_token} = $self->_get_edit_token($doc);
-    if (!$self->{server_date}) {
-    	my $headline1 = $self->_get_server_error($doc);
-	die "Error message from the server: ", $headline1, "\n"
-        	if ($headline1);
-	die "Could not identify the error, this is what I got:\n" . $res->content
-		. "Unknown error, the above is I got from the server.\n";
-    }
-    return $text;
+    $ref = VCS::Lite->new('ref', "\n", "$ref\n");
+    $server = VCS::Lite->new('server', "\n", "$server\n");
+    $local = VCS::Lite->new('local', "\n", "$local\n");
+    return scalar $ref->merge($server, $local)->text("\n");
 }
 
 sub _get_wiki_text {
@@ -676,7 +1140,7 @@ sub _get_wiki_text {
     return $text;
 }
 
-sub _get_server_error {
+sub _get_page_headline {
     my ($self, $doc) = @_;
     my $p = HTML::TokeParser->new(\$doc);
     $p->get_tag("h1");
@@ -691,7 +1155,7 @@ sub _get_edit_date {
     my $date;
     while (my $tag = $p->get_tag('input')) {
         next unless $tag->[1]->{type} eq 'hidden';
-        next unless $tag->[1]->{name} eq 'wpEdittime';
+        next unless $tag->[1]->{name} eq EDIT_TIME_NAME;
         $date = $tag->[1]->{value};
     }
     return $date;
@@ -709,68 +1173,29 @@ sub _get_edit_token {
     return $token;
 }
 
-sub _get_local_page {
-    my ($self, $filename) = @_;
-    print { $self->{debug_fh} } "Loading $filename\n";
-    return '' unless -e $filename;
-    open IN, $filename or die "Cannot open $filename.";
-    local $/;
-    my $text = <IN>;
-    close IN;
-    return $text;
-}
-
 sub _check_path {
     my ($self, $filename) = @_;
-    die "A filename ending in '.wiki'. is required." 
-            unless $filename or ! $filename =~ /\.wiki$/;
-    die "No absolute filenames allowed!\n"
+    WWW::Mediawiki::Client::FileTypeException->throw(
+            "'$filename' doesn't appear to be a wiki file.")
+            unless $filename =~ /\.wiki$/;
+    WWW::Mediawiki::Client::AbsoluteFileNameException->throw(
+            "No absolute filenames allowed!")
             if File::Spec->file_name_is_absolute($filename);
-    my ($vol, $dirs, $fn) = File::Spec->splitpath($filename);
-    mkdir $dirs;
+    return File::Spec->splitpath($filename);
 }
 
 sub _get_reference_page {
     my ($self, $filename) = @_;
     return '' unless -e $filename;
     $filename = $self->_get_ref_filename($filename);
-    my $ref = $self->_get_local_page($filename);
+    my $ref = $self->get_local_page($filename);
     return $ref;
-}
-
-sub _filename_to_url {
-    my ($self, $filename, $path) = @_;
-    confess "Not a .wiki file." unless $filename =~ s/\.wiki$//;
-    confess "No URL path specified." unless $path;
-    my $site_url = $self->{site_url};
-    my ($vol, $dirs, $fn) = File::Spec->splitpath($filename);
-    my @dir = File::Spec->splitdir($dirs);
-    my $char = $self->{space_substitute};
-    $fn =~ s/_/$char/;
-    $site_url .= '/' unless $site_url =~ /\/$/;
-    my $url = $site_url . $path
-            . join('/', @dir) .$fn;
-    return $url;
-}
-
-sub _filename_to_edit_url {
-    my ($self, $fn) = @_;
-    return $self->_filename_to_url($fn, $self->{edit_path});
-}
-
-sub _filename_to_action_url {
-    my ($self, $fn) = @_;
-    return $self->_filename_to_url($fn, $self->{action_path});
-}
-
-sub _url_to_filename {
-    my $self = shift;
-    return shift() . ".wiki";
 }
 
 sub _get_ref_filename {
     my ($self, $filename) = @_;
-    confess "Not a .wiki file." unless $filename =~ /\.wiki$/;
+    WWW::Mediawiki::Client::FileTypeException->throw(
+            "Not a .wiki file.") unless $filename =~ /\.wiki$/;
     my ($vol, $dirs, $fn) = File::Spec->splitpath($filename);
     $fn =~ s/(.*)\.wiki/.$1.ref.wiki/;
     return File::Spec->catfile('.', $dirs, $fn);
@@ -778,32 +1203,21 @@ sub _get_ref_filename {
 
 sub _conflicts_found_in {
     my ($self, $text) = @_;
-    return 1 if $text =~ /^>>>>>> /m;
+    return 1 if $text =~ /Start of conflict 1/m;
     return 0;
 }
 
 sub _get_update_status {
     my ($self, $rv, $sv, $lv, $nv) = @_;
     chomp ($rv, $sv, $lv, $nv);
-    my $status;
+    my $status = STATUS_UNKNOWN;
+    return $status unless $sv || $lv;
+    $status = STATUS_UNCHANGED if $sv eq $lv;
     $status = STATUS_LOCAL_MODIFIED if $lv ne $rv;
     $status = STATUS_SERVER_MODIFIED if $sv && $rv ne $sv;
-    $status = STATUS_ADD unless $sv;
+    $status = STATUS_LOCAL_ADDED unless $sv;
     $status = STATUS_CONFLICT if $self->_conflicts_found_in($nv);
     return $status;
-}
-
-sub _list_wiki_files {
-    my $self = shift;
-    my @files;
-    my $dir = File::Spec->curdir();
-    find(sub { 
-        return unless /^[^.].*\.wiki\z/s;
-        my $name = $File::Find::name;
-        $name = File::Spec->abs2rel($name);
-        push @files, $name;
-    }, $dir);
-    return @files;
 }
 
 1;
@@ -812,11 +1226,21 @@ __END__
 
 =end comment
 
+=head1 BUGS
+
+Please submit bug reports to the CPAN bug tracker at
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=WWW-Mediawiki-Client>.
+
+=head1 DISCUSSION
+
+There is a discussion list.  You can subscribe or read the archives at:
+L<http://www.geekhive.net/cgi-bin/mailman/listinfo/www-mediawiki-client-l>
+
 =head1 AUTHORS
 
 =item Mark Jaroski <mark@geekhive.net> 
 
-Original author
+Author
 
 =item Mike Wesemann <mike@fhi-berlin.mpg.de>
 
@@ -826,10 +1250,14 @@ Added support for Mediawiki 1.3.10+ edit tokens
 
 Improved error messages.
 
+=item Oleg Alexandrov <aoleg@math.ucla.edu>, Thomas Widmann <twid@bibulus.org>
+
+Bug reports and feedback.
+
 =head1 LICENSE
 
 Copyright (c) 2004 Mark Jaroski. 
 
-All rights reserved. This program is free software; you can redistribute it
-and/or modify it under the same terms as Perl itself.
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
 

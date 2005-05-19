@@ -7,7 +7,7 @@ WriteMakefile(
     PREREQ_PM       => 
         { 
             'Test::Differences'=> 0,
-            'Algorithm::Diff::Apply' => 0.2.0,
+            'VCS::Lite' => 0,
             'Getopt::Std'=> 0,
             'Pod::Usage' => 0,
             'File::Spec' => 0,
@@ -18,10 +18,9 @@ WriteMakefile(
             'HTTP::Request::Common' => 0,
             'HTTP::Cookies' => 0,
             'URI::Escape' => 0,
-            'Algorithm::Diff' => 0,
-            'Algorithm::Diff::Apply' => 0,
             'Carp' => 0,
             'Data::Dumper' => 0,
+            'Exception::Class' => 0,
         },
 );
 
