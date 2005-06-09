@@ -13,6 +13,26 @@ use URI::Escape;
 use VCS::Lite;
 use Data::Dumper;
 use WWW::Mediawiki::Client::Exceptions;
+use XML::LibXML ();
+use HTML::Entities qw(encode_entities);
+use File::Temp ();
+use Encode;
+use utf8;
+
+BEGIN {
+    # If we tell LWP it's dealing with UTF-8 then URI::Escape will munge the text
+    # So either we put up with warnings or do this:
+    for (0x100 .. 0xd7ff, 0xf000 .. 0xfdcf) {
+        $URI::Escape::escapes{chr($_)} =
+        &URI::Escape::uri_escape_utf8(chr($_));
+    }
+}
+
+use base 'Exporter';
+our %EXPORT_TAGS = (
+	options => [qw(OPT_YES OPT_NO OPT_DEFAULT OPT_KEEP)],
+);
+our @EXPORT_OK = map { @{$EXPORT_TAGS{$_}} } keys %EXPORT_TAGS;
 
 =head1 NAME
 
@@ -110,11 +130,14 @@ use constant SPACE_SUBSTITUTE => '+';
 use constant WIKI_PATH => 'wiki/wiki.phtml';
 use constant LANGUAGE_CODE => 'en';
 
+use constant SPECIAL_EXPORT => 'Special:Export';
+use constant SPECIAL_VERSION => 'Special:Version';
+
 =head3 $VERSION 
 
 =cut 
 
-our $VERSION = 0.26;
+our $VERSION = 0.27;
 
 =head2 Update Status
 
@@ -153,6 +176,46 @@ use constant STATUS_LOCAL_MODIFIED  => 'M';
 use constant STATUS_SERVER_MODIFIED => 'U';
 use constant STATUS_CONFLICT        => 'C';
 
+=head2 Option Settings
+
+=head3 OPT_YES
+
+Indicates that the setting should always be applied.
+
+=head3 OPT_NO
+
+Indicates that the setting should never be applied.
+
+=head3 OPT_DEFAULT
+
+Indicates that the setting should be applied based on the user profile
+default on the Wikimedia server.
+
+=head3 OPT_KEEP
+
+Four-state options only.  Indicates that the setting should not be
+changed from its current value on the server.
+
+=cut
+
+# Option values:
+use constant OPT_YES     =>  1;
+use constant OPT_NO      =>  0;
+use constant OPT_DEFAULT => -1;
+use constant OPT_KEEP    => -2; # Only for watch.
+
+# Reverse lookup:
+use constant OPTION_SETTINGS => (
+	OPT_YES,     'OPT_YES', 
+	OPT_NO,      'OPT_NO', 
+	OPT_DEFAULT, 'OPT_DEFAULT',
+	OPT_KEEP,    'OPT_KEEP',
+);
+
+# Option defaults:
+use constant MINOR_DEFAULT => OPT_DEFAULT;
+use constant WATCH_DEFAULT => OPT_DEFAULT;
+
 =head2 Mediawiki form widgets
 
 =head3 TEXTAREA_NAME
@@ -162,6 +225,10 @@ use constant STATUS_CONFLICT        => 'C';
 =head3 EDIT_SUBMIT_NAME
 
 =head3 EDIT_SUBMIT_VALUE
+
+=head3 EDIT_PREVIEW_NAME
+
+=head3 EDIT_PREVIEW_VALUE
 
 =head3 EDIT_TIME_NAME
 
@@ -191,6 +258,8 @@ use constant TEXTAREA_NAME      => 'wpTextbox1';
 use constant COMMENT_NAME       => 'wpSummary';
 use constant EDIT_SUBMIT_NAME   => 'wpSave';
 use constant EDIT_SUBMIT_VALUE  => 'Save Page';
+use constant EDIT_PREVIEW_NAME  => 'wpPreview';
+use constant EDIT_PREVIEW_VALUE => 'Show preview';
 use constant EDIT_TIME_NAME     => 'wpEdittime';
 use constant EDIT_TOKEN_NAME    => 'wpEditToken';
 use constant EDIT_WATCH_NAME    => 'wpWatchthis';
@@ -222,8 +291,8 @@ Controls which attributes get saved out to the config file.
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 use constant SAVED_ATTRIBUTES => (
-    qw(site_url host language_code space_substitute username password wiki_path
-       watch minor_edit)
+    qw(site_url host language_code space_substitute username password 
+       wiki_path watch encoding minor_edit)
 );  # It's important that host goes first since it has side effects
 
 
@@ -399,6 +468,21 @@ sub wiki_path {
     return $self->{wiki_path};
 }
 
+=head2 encoding
+
+  my $encoding = $mvs->encoding($encoding);
+
+C<encoding> is the charset in which the Mediawiki server expects uploaded
+content to be encoded.  This should be set the first time you use do_login.
+
+=cut
+
+sub encoding {
+    my ($self, $encoding) = @_;
+    $self->{encoding} = $encoding if $encoding;
+    return $self->{encoding};
+}
+
 =head2 username
 
   my $url = $mvs->username($url);
@@ -447,45 +531,114 @@ sub commit_message {
 
 =head2 watch
 
-  my $bool = $mvs->watch($bool);
+  my $watch = $mvs->watch($watch);
 
 Mediawiki allows users to add a page to thier watchlist at submit time
 using using the "Watch this page" checkbox.  The field C<watch> allows
 commits from this library to add or remove the page in question to/from
 your watchlist.
 
+This is a four-state option:
+
+=over
+
+=item C<OPT_YES>
+
+Always add pages to the watchlist.
+
+=item C<OPT_NO>
+
+Remove pages from the watchlist.
+
+=item C<OPT_KEEP>
+
+Maintain current watched state.
+
+=item C<OPT_DEFAULT> (default)
+
+Adhere to user profile default on the server.  Watched pages will
+always remain watched, and all other pages will be watched if the
+"watch all pages by default" option is enabled in the user profile.
+
+=back
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::InvalidOptionException
+
+=back
+
 =cut
 
 sub watch {
-    my ($self, $m) = @_;
-    $self->{watch} = $m if $m;
-    $self->{watch} = 0 unless defined $self->{watch};
+    my ($self, $watch) = @_;
+    if (defined($watch)) {
+	$self->_option_verify('watch', $watch, 
+		[OPT_YES, OPT_NO, OPT_KEEP, OPT_DEFAULT]);
+	$self->{watch} = $watch;
+    }
+    $self->{watch} = WATCH_DEFAULT unless defined $self->{watch};
     return $self->{watch};
 }
 
 =head2 minor_edit
 
-  my $bool = $mvs->minor_edit($bool);
+  my $minor = $mvs->minor_edit($minor);
 
 Mediawiki allows users to mark some of their edits as minor using the "This
 is a minor edit" checkbox.  The field C<minor_edit> allows a commit from
 the mediawiki client to be marked as a minor edit.
 
+This is a three-state option:
+
+=over
+
+=item C<OPT_YES>
+
+Always declare change as minor.
+
+=item C<OPT_NO>
+
+Never declare change as minor.
+
+=item C<OPT_DEFAULT> (default)
+
+Adhere to user profile default on the server.  Edits will be marked
+as minor if the "minor changes by default" option is enabled in the
+user profile.
+
+=back
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::InvalidOptionException
+
+=back
+
 =cut
 
 sub minor_edit {
-    my ($self, $m) = @_;
-    $self->{minor_edit} = $m if $m;
-    $self->{minor_edit} = 0 unless defined $self->{minor_edit};
+    my ($self, $minor) = @_;
+    if (defined($minor)) {
+	$self->_option_verify('minor_edit', $minor, 
+		[OPT_YES, OPT_NO, OPT_DEFAULT]);
+	$self->{minor_edit} = $minor;
+    }
+    $self->{minor_edit} = MINOR_DEFAULT unless defined $self->{minor_edit};
     return $self->{minor_edit};
 }
 
 =head2 status
 
-  my $status = $mvs->status;
+  my %status = $mvs->status;
 
-This field will be C<undef> until do_update has been called, after which it
-will be set to one of the following (see CONSTANTS for discriptions):
+This field will be empty until do_update has been called, after which it
+will be set to a hash of C<filename> => C<status> pairs.  Each C<status> 
+will be one of the following (see CONSTANTS for discriptions):
 
 =item WWW::Mediawiki::Client::STATUS_UNKNOWN;
 
@@ -505,6 +658,7 @@ sub status {
     my ($self, $arg) = @_;
     WWW::Mediawiki::Client::ReadOnlyFieldException->throw(
             "Tried to set read-only field 'status' to $arg.") if $arg;
+    return unless defined($self->{status});
     return $self->{status};
 }
 
@@ -609,6 +763,7 @@ sub do_login {
     );
     # success == Mediawiki gave us a Password cookie
     if ($self->{ua}->cookie_jar->as_string =~ /UserID=/) {
+        $self->encoding($self->_get_server_encoding);
         $self->save_state;
         $self->{ua}->cookie_jar->save
                 or WWW::Mediawiki::Client::CookieJarException->throw(
@@ -690,21 +845,40 @@ B<Throws:>
 =cut
 
 sub do_update {
-    my $self = shift;
-    my $filename = shift;
-    WWW::Mediawiki::Client::URLConstructionException->throw(
-            "No server URL specified.") unless $self->{host};
-    my ($vol, $dirs, $fn) = $self->_check_path($filename);
-    my $sv = $self->get_server_page($self->filename_to_pagename($filename));
+	my ($self, @files) = @_;
+        @files = $self->list_wiki_files unless @files;
+	WWW::Mediawiki::Client::URLConstructionException->throw(
+		"No server URL specified.") unless $self->{host};
+	my %pages;
+	my %dirs;
+	foreach my $filename (@files) {
+		my ($vol, $dirs, $fn) = $self->_check_path($filename);
+		my $pagename = $self->filename_to_pagename($filename);
+		$pages{$filename} = $pagename;
+		$dirs{$filename}  = $dirs;
+	}
+	$self->_get_exported_pages(values %pages);
+	foreach my $filename (@files) {
+		my $pagename = $pages{$filename};
+		my $dirs     = $dirs{$filename};
+		my $status = $self->_update_core($filename, $pagename, $dirs);
+		$self->{status}->{$filename} = $status;
+	}
+        return $self->status;
+}
+
+sub _update_core {
+    my ($self, $filename, $pagename, $dirs) = @_;
+    my $sv = $self->get_server_page($pagename);
     my $lv = $self->get_local_page($filename);
     my $rv = $self->_get_reference_page($filename);
     my $nv = $self->_merge($filename, $rv, $sv, $lv);
-    $self->{status} = $self->_get_update_status($rv, $sv, $lv, $nv);
-    return unless $self->{status};  # nothing changes, nothing to do
-    return $self->{status} 
-            if $self->{status} eq STATUS_LOCAL_ADDED
-                or $self->{status} eq STATUS_UNKNOWN
-                or $self->{status} eq STATUS_UNCHANGED;
+    my $status = $self->_get_update_status($rv, $sv, $lv, $nv);
+    return unless $status;  # nothing changes, nothing to do
+    return $status
+            if $status eq STATUS_LOCAL_ADDED
+                or $status eq STATUS_UNKNOWN
+                or $status eq STATUS_UNCHANGED;
     # save the newly retrieved and/or merged version as our local copy
     my @dirs = split '/', $dirs;
     for my $d (@dirs) {
@@ -714,16 +888,16 @@ sub do_update {
     for (@dirs) {
         chdir '..';
     }
-    open OUT, ">$filename" or WWW::Mediawiki::Client::FileAccessException->throw(
+    open OUT, ">:utf8", $filename or WWW::Mediawiki::Client::FileAccessException->throw(
             "Cannot open $filename for writing.");
     print OUT $nv;
     # save the server version out as the reference file
     $filename = $self->_get_ref_filename($filename);
-    open OUT, ">$filename" or WWW::Mediawiki::Client::FileAccessException->throw(
+    open OUT, ">:utf8", $filename or WWW::Mediawiki::Client::FileAccessException->throw(
             "Cannot open $filename for writing.");
     print OUT $sv;
     close OUT;
-    return $self->{status};
+    return $status;
 }
 
 =head2 do_up
@@ -767,6 +941,8 @@ B<Throws:>
 
 =item WWW::Mediawiki::Client::UpdateNeededException
 
+=item WWW::Mediawiki::Client::InvalidOptionException
+
 =back
 
 =cut
@@ -776,51 +952,12 @@ sub do_commit {
     WWW::Mediawiki::Client::CommitMessageException->throw(
             "No commit message specified")
         unless $self->{commit_message};
-    WWW::Mediawiki::Client::URLConstructionException->throw(
-            "No server URL specified.") unless $self->{host};
-    WWW::Mediawiki::Client::FileAccessException->throw("No such file!") 
-        unless -e $filename;
-    my $text = $self->get_local_page($filename);
-    my $pagename = $self->filename_to_pagename($filename);
-    my $sp = $self->get_server_page($pagename);
-    my $ref = $self->_get_reference_page($filename);
-    chomp ($text, $sp, $ref);
-    WWW::Mediawiki::Client::UpdateNeededException->throw(
-            error => $self->filename_to_pagename($filename) 
-                   . " has changed on the server.",
-        ) unless $sp eq $ref;
-    WWW::Mediawiki::Client::ConflictsPresentException->throw(
-            "$filename appears to have unresolved conflicts")
-        if $self->_conflicts_found_in($text);
-    my $minorbox = $self->{minor_edit} ? EDIT_MINOR_NAME : '';
-    my $watchbox = $self->{watch} ? EDIT_WATCH_NAME : '';
-    my $url = $self->filename_to_url($filename, SUBMIT);
-    my $res = $self->{ua}->request(POST $url,
-        [ 
-            &TEXTAREA_NAME      => $text,
-            &COMMENT_NAME       => $self->{commit_message},
-            &EDIT_SUBMIT_NAME   => &EDIT_SUBMIT_VALUE,
-            &EDIT_TIME_NAME     => $self->{server_date},
-            &EDIT_TOKEN_NAME    => $self->{server_token},
-            $watchbox           => $self->{watch} ? CHECKED : UNCHECKED,
-            $minorbox           => $self->{minor_edit} ? CHECKED : UNCHECKED,
-        ]
-    );
-    my $doc = $res->content;
-    my $headline = $self->_get_page_headline($doc);
-    unless (lc($headline) eq lc($pagename)) {
-        WWW::Mediawiki::Client::CommitException->throw(
-	        error => "The page you are trying to commit appears to contain a link which is associated with Wikispam.",
-                res   => $res,
-            ) if ($headline eq 'Spam protection filter');
-        WWW::Mediawiki::Client::CommitException->throw(
-	        error => "When we tried to commit '$pagename' the server responded with '$headline'.",
-                res   => $res,
-            ) if ($headline);
-    }
+    # Perform the actual upload:
+    my ($res, $text) = $self->_upload_file($filename, 1);
     # save the local version as the reference version
     my $refname = $self->_get_ref_filename($filename);
-    open OUT, ">$refname" or WWW::Mediawiki::Client::FileAccessException->throw(
+    open OUT, ">:utf8", $refname 
+            or WWW::Mediawiki::Client::FileAccessException->throw(
             "Cannot open $refname for writing.");
     print OUT $text;
     close OUT;
@@ -834,6 +971,105 @@ This is an alias for C<do_commit>.
 
 sub do_com {
     do_commit(@_);
+}
+
+=head2 do_preview
+  
+  $self->do_preview($filename);
+
+The C<do_preview> method is a non-writing version of the C<do_commit>
+method.  It uploads the given filename to test its formatting.  Its
+behaviour and arguments are identical to C<do_commit>.
+
+The behaviour of C<do_preview> is currently based on the environment.
+If C<MVS_BROWSER> is set, this program (typically a web browser) will
+be launched on a temporary file.  Otherwise, the preview will be saved
+to the file specified by the C<MVS_PREVIEW> variable, or preview.html
+if this is unset.  This behaviour is considered a prototype for future
+functionality, and is C<subject to change> in the near future.
+
+Returns the name of the preview file, or undef if the file was sent to
+a web browser.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::ConflictsPresentException
+
+=item WWW::Mediawiki::Client::FileAccessException
+
+=item WWW::Mediawiki::Client::FileTypeException
+
+=item WWW::Mediawiki::Client::URLConstructionException
+
+=item WWW::Mediawiki::Client::UpdateNeededException
+
+=back
+
+=cut
+
+sub do_preview {
+	my ($self, $filename) = @_;
+	my ($response) = $self->_upload_file($filename, 0);
+	my $url = encode_entities($response->request->uri);
+	my $content = $response->decoded_content;
+	$content =~ s#<head>#$&<base href="$url"/>#;
+	my $browser = $ENV{MVS_BROWSER};
+	if (defined($browser)) {
+            my $fh = new File::Temp(UNLINK => 1, SUFFIX => '.html');
+            print $fh Encode::encode_utf8($content);
+            $fh->close;
+            system($browser, $fh->filename);
+            return undef;
+	}
+	my $preview = $ENV{MVS_PREVIEW};
+	$preview = 'preview.html' unless defined($preview);
+	open(PREVIEW, '>', $preview) 
+		or WWW::Mediawiki::Client::FileAccessException->throw(
+			"Cannot open $preview for writing.");
+	print PREVIEW $content;
+	close(PREVIEW) or WWW::Mediawiki::Client::FileAccessException->throw(
+			"Cannot close $preview.");
+	print STDERR "Saved preview: $preview\n";
+	return $preview;
+}
+
+=head2 do_clean
+
+  $self->do_clean;
+
+Removes all reference files under the current directory that have no
+corresponding Wiki files.
+
+B<Throws:>
+
+=over
+
+=item WWW::Mediawiki::Client::FileAccessException
+
+=back
+
+=cut
+
+sub do_clean {
+	my ($self) = @_;
+
+	my $dir = File::Spec->curdir();
+	find(sub { 
+		return unless m/^\..*\.ref\.wiki\z/s;
+
+		my $name = $File::Find::name;
+		$name = File::Spec->abs2rel($name);
+
+		my $wiki = $self->_ref_to_filename($name);
+		return if -e $wiki;
+
+		warn "Deleting: $name\n";
+		unlink($name) 
+		    or WWW::Mediawiki::Client::FileAccessException->throw(
+			"Cannot delete reference file $name");
+	}, $dir);
 }
 
 =head2 save_state
@@ -859,7 +1095,7 @@ sub save_state {
     foreach my $attr (SAVED_ATTRIBUTES) {
         $init{$attr} = $self->$attr;
     }
-    open OUT, ">$conf" or WWW::Mediawiki::Client::FileAccessException->throw(
+    open OUT, ">:utf8", $conf or WWW::Mediawiki::Client::FileAccessException->throw(
             "Cannot write to config file, $conf.");
     print OUT Dumper(\%init);
     close OUT;
@@ -915,16 +1151,23 @@ B<Throws:>
 
 sub get_server_page {
     my ($self, $pagename) = @_;
+
+    my $export = delete $self->{export}->{$pagename};
+    return $export if defined($export);
+
     my $url = $self->pagename_to_url($pagename, EDIT);
     my $res = $self->{ua}->get($url);
     WWW::Mediawiki::Client::ServerPageException->throw(
             error => "Couldn't fetch \"$pagename\" from the server.",
             res => $res,
         ) unless $res->is_success;
-    my $doc = $res->content;
+    my $doc = $res->decoded_content;
     my $text = $self->_get_wiki_text($doc);
-    $self->{server_date} = $self->_get_edit_date($doc);
-    $self->{server_token} = $self->_get_edit_token($doc);
+    $self->{edit}->{date} = $self->_get_edit_date($doc);
+    $self->{edit}->{token} = $self->_get_edit_token($doc);
+    $self->{edit}->{watch_now} = $self->_get_edit_is_watching($doc);
+    $self->{edit}->{def_watch} = $self->_get_edit_watch_default($doc);
+    $self->{edit}->{def_minor} = $self->_get_edit_minor_default($doc);
     my $headline = $self->_get_page_headline($doc);
     my $expected = lc $pagename;
     unless (lc($headline) =~ /$expected$/) {
@@ -970,7 +1213,7 @@ sub get_local_page {
     my ($self, $filename) = @_;
     $self->_check_path($filename);
     return '' unless -e $filename;
-    open IN, $filename or 
+    open IN, "<:utf8", $filename or 
             WWW::Mediawiki::Client::FileAccessException->throw(
             "Cannot open $filename.");
     local $/;
@@ -1092,7 +1335,8 @@ sub url_to_filename {
     my ($self, $url) = @_;
     my $char = '\\' . $self->space_substitute;
     $url =~ s/$char/_/g;
-    $url =~ m/&title=([^&]*)/;
+    my $title = TITLE;
+    $url =~ m/&$title=([^&]*)/;
     return "$1.wiki";
 }
 
@@ -1140,6 +1384,21 @@ sub _get_wiki_text {
     return $text;
 }
 
+sub _get_server_encoding {
+    my ($self) = @_;
+    my $url = $self->_get_version_url;
+    my $res = $self->{ua}->get($url);
+    my $doc = $res->decoded_content;
+    my $p = HTML::TokeParser->new(\$doc);
+    while ( my $t = $p->get_tag("meta") ) {
+        next unless defined $t->[1]->{'http-equiv'}
+               and $t->[1]->{'http-equiv'} eq 'Content-Type';
+        my $cont = $t->[1]->{'content'};
+        $cont =~ m/charset=(.*)/;
+        return $1;
+    }
+}
+
 sub _get_page_headline {
     my ($self, $doc) = @_;
     my $p = HTML::TokeParser->new(\$doc);
@@ -1173,6 +1432,41 @@ sub _get_edit_token {
     return $token;
 }
 
+sub _get_edit_is_watching {
+    my ($self, $doc, $name) = @_;
+    my $p = HTML::TokeParser->new(\$doc);
+    my $status;
+    while (my $tag = $p->get_tag('a')) {
+        next unless $tag->[1]->{href} 
+                && $tag->[1]->{href} =~ m/&action=((?:un)?watch)/;
+	# If 'un'watch, then it's watched; otherwise, it's not.
+        $status = ($1 eq 'unwatch' ? 1 : 0);
+    }
+    return $status;
+}
+
+sub _get_edit_checkbox {
+    my ($self, $doc, $name) = @_;
+    my $p = HTML::TokeParser->new(\$doc);
+    my $status;
+    while (my $tag = $p->get_tag('input')) {
+        next unless $tag->[1]->{type} eq 'checkbox';
+        next unless $tag->[1]->{name} eq $name;
+        $status = ($tag->[1]->{checked} ? 1 : 0);
+    }
+    return $status;
+}
+
+sub _get_edit_watch_default {
+	my ($self, $doc) = @_;
+	return $self->_get_edit_checkbox($doc, EDIT_WATCH_NAME);
+}
+
+sub _get_edit_minor_default {
+	my ($self, $doc) = @_;
+	return $self->_get_edit_checkbox($doc, EDIT_MINOR_NAME);
+}
+
 sub _check_path {
     my ($self, $filename) = @_;
     WWW::Mediawiki::Client::FileTypeException->throw(
@@ -1201,6 +1495,15 @@ sub _get_ref_filename {
     return File::Spec->catfile('.', $dirs, $fn);
 }
 
+sub _ref_to_filename {
+    my ($self, $ref) = @_;
+    my ($vol, $dirs, $fn) = File::Spec->splitpath($ref);
+    $fn =~ s/^\.(.*)\.ref\.wiki$/$1.wiki/
+        or WWW::Mediawiki::Client::FileTypeException->throw(
+            "Not a .ref.wiki file.");
+    return File::Spec->catpath($vol, $dirs, $fn);
+}
+
 sub _conflicts_found_in {
     my ($self, $text) = @_;
     return 1 if $text =~ /Start of conflict 1/m;
@@ -1218,6 +1521,175 @@ sub _get_update_status {
     $status = STATUS_LOCAL_ADDED unless $sv;
     $status = STATUS_CONFLICT if $self->_conflicts_found_in($nv);
     return $status;
+}
+
+sub _get_host_url {
+	my ($self) = @_;
+	my $lang = $self->language_code;
+	my $host = $self->host;
+	$host =~ s/__LANG__/$lang/g;
+	return "http://$host/";
+}
+
+sub _get_version_url {
+    my ($self) = @_;
+    my $lang = $self->language_code;
+    my $path = $self->wiki_path;
+    $path =~ s/__LANG__/$lang/g;
+    return $self->_get_host_url 
+         . $path . '?' . TITLE . '=' . SPECIAL_VERSION;
+}
+
+sub _get_export_url {
+    my ($self) = @_;
+    my $lang = $self->language_code;
+    my $path = $self->wiki_path;
+    $path =~ s/__LANG__/$lang/g;
+    return $self->_get_host_url 
+         . $path . '?' . TITLE . '=' . SPECIAL_EXPORT;
+}
+
+sub _get_exported_pages {
+    my ($self, @pages) = @_;
+    my $count = scalar @pages;
+    my $url = $self->_get_export_url;
+    my $response = $self->{ua}->request(POST $url, [ 
+            pages => join("\n", @pages),
+            action => 'submit',
+            curonly => 'true',
+    ]);
+    WWW::Mediawiki::Client::ServerPageException->throw(
+            error => "Couldn't fetch $count pages from the server.",
+            res => $response,
+        ) unless $response->is_success;
+    my $parser = XML::LibXML->new;
+    my $doc = $parser->parse_string($response->decoded_content);
+    my %expecting = map {$_ => 1} @pages;
+    my %export = ();
+    foreach my $node ($doc->findnodes('/mediawiki/page')) {
+        my $page = $node->findvalue(TITLE);
+        my $text = $node->findvalue('revision/text');
+        WWW::Mediawiki::Client::ServerPageException->throw(
+            error => "Server returned unexpected page '$page'.",
+            res => $response) unless $expecting{$page};
+        $export{$page} = $text;
+    }
+    $self->{export} = \%export;
+}
+
+sub _upload_file {
+    my ($self, $filename, $commit) = @_;
+    WWW::Mediawiki::Client::URLConstructionException->throw(
+            "No server URL specified.") unless $self->{host};
+    WWW::Mediawiki::Client::FileAccessException->throw("No such file!") 
+        unless -e $filename;
+    WWW::Mediawiki::Client::CommitException->throw(
+            'Could not determine charset for uploading to this server.'
+        ) unless $self->encoding;
+    my $text = $self->get_local_page($filename);
+    my $pagename = $self->filename_to_pagename($filename);
+    my $sp = $self->get_server_page($pagename);
+    my $ref = $self->_get_reference_page($filename);
+    chomp ($text, $sp, $ref);
+    WWW::Mediawiki::Client::UpdateNeededException->throw(
+            error => $self->filename_to_pagename($filename) 
+                   . " has changed on the server.",
+        ) unless $sp eq $ref;
+    WWW::Mediawiki::Client::ConflictsPresentException->throw(
+            "$filename appears to have unresolved conflicts")
+        if $self->_conflicts_found_in($text);
+    my @params;
+    push(@params, EDIT_MINOR_NAME, CHECKED) if $self->_option_check(
+        'minor_edit', $self->{minor_edit}, 
+	$self->{edit}->{def_minor});
+    push(@params, EDIT_WATCH_NAME, CHECKED) if $self->_option_check(
+	'watch', $self->{watch}, 
+	$self->{edit}->{def_watch}, $self->{edit}->{watch_now});
+    my $act_name  = ($commit ? EDIT_SUBMIT_NAME  : EDIT_PREVIEW_NAME );
+    my $act_value = ($commit ? EDIT_SUBMIT_VALUE : EDIT_PREVIEW_VALUE);
+    my $url = $self->filename_to_url($filename, SUBMIT);
+    my $octets = Encode::encode($self->encoding, $text);
+    my $res = $self->{ua}->post($url,
+        [ 
+            $act_name           => $act_value,
+            &TEXTAREA_NAME      => $octets,
+            &COMMENT_NAME       => $self->{commit_message},
+            &EDIT_TIME_NAME     => $self->{edit}->{date},
+            &EDIT_TOKEN_NAME    => $self->{edit}->{token},
+	    @params,
+        ],
+    );
+    my $doc = $res->decoded_content;
+    my $headline = $self->_get_page_headline($doc);
+    my $expect = ($commit ? $pagename : "Editing $pagename");
+    unless (lc($headline) eq lc($expect)) {
+        WWW::Mediawiki::Client::CommitException->throw(
+	        error => "The page you are trying to commit appears to contain a link which is associated with Wikispam.",
+                res   => $res,
+            ) if ($headline eq 'Spam protection filter');
+        WWW::Mediawiki::Client::CommitException->throw(
+	        error => "When we tried to commit '$pagename' the server responded with '$headline'.",
+                res   => $res,
+            ) if ($headline);
+    }
+    return ($res, $text);
+}
+
+sub _option_verify {
+	my ($self, $name, $value, $r_accept) = @_;
+
+	foreach my $acc (@{$r_accept}) {
+		return 1 if $acc == $value;
+	}
+
+	my %opts = OPTION_SETTINGS;
+	my $valstr = $opts{$value};
+	$valstr = "value '$value'" unless defined($valstr);
+
+        WWW::Mediawiki::Client::InvalidOptionException->throw(
+	        error  => "Cannot set field $name to $valstr.",
+		field  => $name,
+                option => $opts{$value},
+		value  => $value,
+	);
+}
+
+sub _option_check {
+	my ($self, $name, $value, $default, $current) = @_;
+
+	return 1 if $value == OPT_YES;
+	return 0 if $value == OPT_NO;
+
+	if ($value == OPT_DEFAULT) {
+		return $default if defined($default);
+		WWW::Mediawiki::Client::InvalidOptionException->throw(
+			error  => "Field '$name' cannot use OPT_DEFAULT:"
+			    . " Default information could not be determined.",
+			field  => $name,
+			option => 'OPT_DEFAULT',
+			value  => $value,
+		);
+	}
+
+	if ($value == OPT_KEEP) {
+		return $current if defined($current);
+		WWW::Mediawiki::Client::InvalidOptionException->throw(
+			error  => "Field '$name' cannot use OPT_KEEP:"
+			    . " Current information could not be determined.",
+			field  => $name,
+			option => 'OPT_DEFAULT',
+			value  => $value,
+		);
+	}
+
+	# Should never happen; these are verified at assignment time.
+	my %opts = OPTION_SETTINGS;
+        WWW::Mediawiki::Client::InvalidOptionException->throw(
+	        error  => "Field '$name' is in unknown state '$value'.",
+		field  => $name,
+                option => $opts{$value},
+		value  => $value
+	);
 }
 
 1;
@@ -1238,9 +1710,11 @@ L<http://www.geekhive.net/cgi-bin/mailman/listinfo/www-mediawiki-client-l>
 
 =head1 AUTHORS
 
+=over
+
 =item Mark Jaroski <mark@geekhive.net> 
 
-Author
+Original author, maintainer
 
 =item Mike Wesemann <mike@fhi-berlin.mpg.de>
 
@@ -1253,6 +1727,13 @@ Improved error messages.
 =item Oleg Alexandrov <aoleg@math.ucla.edu>, Thomas Widmann <twid@bibulus.org>
 
 Bug reports and feedback.
+
+=item Adrian Irving-Beer <wisq@wisq.net>
+
+Preview support, export support for multi-page update, more 'minor'
+and 'watch' settings, and bug reports.
+
+=back
 
 =head1 LICENSE
 

@@ -2,6 +2,461 @@
 # arch-tag: automatic-ChangeLog--mark@sdf-eu.org--arch/WWW-Mediawiki-Client--0.25
 #
 
+2005-06-06 13:12:06 GMT	Mark Jaroski <mark@geekhive.net>	patch-47
+
+    Summary:
+      Fixed a couple of minor bugs, added documentation
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-47
+
+    Fixed two bugs that had to do with dependencies, including changing the
+    version number of URI required to 1.31, and added a use Encode line.  Added
+    to the documentation to highlight differences.
+    
+    -mark
+    
+    
+
+    modified files:
+     ChangeLog Makefile.PL bin/mvs lib/WWW/Mediawiki/Client.pm
+
+
+2005-06-03 15:16:58 GMT	Mark Jaroski <mark@geekhive.net>	patch-46
+
+    Summary:
+      added encoding field
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-46
+
+    Some Mediawiki servers use encodings other than UTF-8.  For these servers
+    it's necessary to detect the encoding and use it for uploading content.
+    
+    
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm
+
+
+2005-05-30 14:00:48 GMT	Mark Jaroski <mark@geekhive.net>	patch-45
+
+    Summary:
+      added hack to correct UTF-8 file upload problem
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-45
+
+    Added a hack to correct a problem with multibyte characters in URL::Encode
+    which is used when uploading data through LWP.
+    
+    
+
+    modified files:
+     lib/WWW/Mediawiki/Client.pm
+
+
+2005-05-30 07:24:31 GMT	Mark Jaroski <mark@geekhive.net>	patch-44
+
+    Summary:
+      got rid of wide character warnings
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-44
+
+    Perl issues "wide character" warnings when writing UNICODE to non-unicode
+    streams and filehandles.  This fixes that.  I worry that it's broken
+    iso-8859-1 support though.
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm t/client.t
+
+
+2005-05-28 13:12:49 GMT	Mark Jaroski <mark@geekhive.net>	patch-43
+
+    Summary:
+      added documentation for using a PROXY
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-43
+
+    Added documentation on how configure mvs to work with an http proxy.
+    
+    
+
+    modified files:
+     ChangeLog bin/mvs
+
+
+2005-05-27 16:02:08 GMT	Mark Jaroski <mark@geekhive.net>	patch-42
+
+    Summary:
+      fixed update output, got rid of utf8 warning
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-42
+
+    I had messed up the update output by leaving it dependant on the @files
+    variable even when it was empty because that is now being done within the
+    library.
+    
+    
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm
+
+
+2005-05-27 14:55:54 GMT	Mark Jaroski <mark@geekhive.net>	patch-41
+
+    Summary:
+      a little more about images
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-41
+
+
+    modified files:
+     TODO
+
+
+2005-05-27 14:37:05 GMT	Mark Jaroski <mark@geekhive.net>	patch-40
+
+    Summary:
+      added documentation for ENV variables
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-40
+
+
+    modified files:
+     TODO bin/mvs
+
+
+2005-05-26 14:04:46 GMT	Mark Jaroski <mark@geekhive.net>	patch-39
+
+    Summary:
+      Credit for Adrian
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-39
+
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-30
+       Added self to authors list, and moved it =over for perldoc formatting.
+    
+
+    modified files:
+     lib/WWW/Mediawiki/Client.pm
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-30
+
+
+2005-05-25 19:17:07 GMT	Mark Jaroski <mark@geekhive.net>	patch-38
+
+    Summary:
+      fixed two POD errors, and a warning for commands with no status
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-38
+
+
+    modified files:
+     ChangeLog bin/mvs
+
+
+2005-05-25 15:53:30 GMT	Mark Jaroski <mark@geekhive.net>	patch-37
+
+    Summary:
+      took out introspection
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-37
+
+    I replaced the introspection methods with a simple call to list_wiki_files
+    in do_update().
+    
+    
+
+    modified files:
+     lib/WWW/Mediawiki/Client.pm
+
+
+2005-05-25 15:35:57 GMT	Mark Jaroski <mark@geekhive.net>	patch-36
+
+    Summary:
+      CONSTANTS and style tidying
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-36
+
+    Some of the new code is in Adrian's style, which is fine on it's own, but
+    it's probably better to be consistant here.
+    
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm
+
+
+2005-05-25 10:01:35 GMT	Mark Jaroski <mark@geekhive.net>	patch-35
+
+    Summary:
+      droped export_path, fixed problem with do_update retval
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-35
+
+    It's possible to reach the Special:Export page using the wiki_path field,
+    so I've dropped the extra field as redundant, and a possible source of
+    bugs.  I've also changed the way the status field works (returns a hashref
+    instead of a list) and so eliminated the failures which had recently been
+    introduced in t/server.t
+    
+    
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm t/server.t
+
+
+2005-05-24 20:16:04 GMT	Mark Jaroski <mark@geekhive.net>	patch-34
+
+    Summary:
+      bug fixes for Adrian's changes
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-34
+
+    
+    
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-17
+       Switched to more descriptive and unified option variables.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-18
+       Accept parameter values for --wikipath, --spaces (oops).
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-19
+       Fixed a missing field in the new option exception.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-20
+       Fixed a couple of bugs in my recent W-M-C changes.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-21
+       Added multi-state --minor and --watch options.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-22
+       Documentation spelling and usage fixes.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-23
+       Another documentation fix, re: single-file commit.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-24
+       Added docs for 'preview'.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-25
+       Added docs for 'clean'.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-26
+       Fixed a couple of option handling bugs.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-27
+       Another bug I left in W-M-C re: minor edits.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-28
+       Proper reporting of watch and minor values.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-29
+       Genericised English-to-option and option-to-English.
+    
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm
+     lib/WWW/Mediawiki/Client/Exceptions.pm
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-17
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-18
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-19
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-20
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-21
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-22
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-23
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-24
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-25
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-26
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-27
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-28
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-29
+
+
+2005-05-24 20:07:41 GMT	Mark Jaroski <mark@geekhive.net>	patch-33
+
+    Summary:
+      Better use of information from Mediawiki server, from Adrian Irving-Beer
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-33
+
+    
+    
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-13
+       Added capturing of more information from the edit page (watch now, default watch/minor).
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-14
+       Changed 'watch' and 'minor_edit' to quad- and tri-state options, respectively.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-15
+       Added 'use strict' to all tests.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-16
+       Got rid of extraneous debug Dumper use.
+    
+
+    modified files:
+     lib/WWW/Mediawiki/Client.pm
+     lib/WWW/Mediawiki/Client/Exceptions.pm t/client.t
+     t/exceptions.t t/mvs.t t/server.t
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-13
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-14
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-15
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-16
+
+
+2005-05-24 20:04:34 GMT	Mark Jaroski <mark@geekhive.net>	patch-32
+
+    Summary:
+      previw support from Adrian Irving-Beer
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-32
+
+    
+    
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-10
+       Added explicit return, because I run 'mvs' wrapped for testing.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-11
+       Getopt::Long support, and option support conditional on command.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-12
+       Preview support.
+    
+
+    modified files:
+     bin/mvs lib/WWW/Mediawiki/Client.pm
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-10
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-11
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-12
+
+
+2005-05-24 20:00:05 GMT	Mark Jaroski <mark@geekhive.net>	patch-31
+
+    Summary:
+      added clean command from Adrian Irving-Beer
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-31
+
+    
+    
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-9
+       Added 'clean' command.
+    
+
+    modified files:
+     lib/WWW/Mediawiki/Client.pm
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-9
+
+
+2005-05-24 19:57:01 GMT	Mark Jaroski <mark@geekhive.net>	patch-30
+
+    Summary:
+      Special:Export support from Adrian Irving-Beer
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-30
+
+    
+    
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-4
+       Basic export support.  Multi-file update too, but not supported yet.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-5
+       Added multi-file support for update (no default yet).
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-6
+       Added doc block for export_path, mostly the same as wiki_path.
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-7
+       Add default_files method.  (Unsure about this; see patch log.)
+    
+
+    modified files:
+     ChangeLog bin/mvs lib/WWW/Mediawiki/Client.pm
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-4
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-5
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-6
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-7
+
+
+2005-05-24 09:30:44 GMT	Mark Jaroski <mark@geekhive.net>	patch-29
+
+    Summary:
+      error check for non-exception errors
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-29
+
+    
+    
+    Patches applied:
+    
+     * wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-3
+       Report unknown run-time errors, e.g. syntax.
+    
+
+    modified files:
+     bin/mvs
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-3
+
+
+2005-05-24 09:20:56 GMT	Mark Jaroski <mark@geekhive.net>	patch-28
+
+    Summary:
+      No-read test fails for root or fakeroot, skip it.
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-28
+
+    Applied patch from Adrian Irving-Beer <wisq@wisq.net>.  This test was
+    failing as root, which is a problem when building a debian package.
+    
+
+    modified files:
+     t/client.t
+
+    new patches:
+     wisq@wisq.net--2004/libwww-mediawiki-client-perl--devo--0.25--patch-1
+
+
+2005-05-22 14:25:33 GMT	Mark Jaroski <mark@geekhive.net>	patch-27
+
+    Summary:
+      applied patch from Sébastien Aperghis
+    Revision:
+      WWW-Mediawiki-Client--0.25--patch-27
+
+    Here is a documentation patch that corrects the =head1 NAME of one
+    of the modules so that it appears correctly.
+    
+    Thanks Sébastien!
+    
+    
+
+    modified files:
+     ChangeLog lib/WWW/Mediawiki/Client/Exceptions.pm
+
+
 2005-05-19 09:40:37 GMT	Mark Jaroski <mark@geekhive.net>	patch-26
 
     Summary:

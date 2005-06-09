@@ -1,22 +1,34 @@
 #!/usr/bin/perl -w 
 use strict;
-use WWW::Mediawiki::Client;
-use Getopt::Std;
+use WWW::Mediawiki::Client ':options';
+use Getopt::Long ();
 use Pod::Usage;
 use Data::Dumper;
 
 ##############################################################################
 # Fields                                                                     #
 ##############################################################################
-our ( $opt_h, $opt_q, $opt_d, $opt_v, 
-      $opt_m, $opt_u, $opt_p, $opt_s,
-      $opt_l, $opt_w, $opt_W, $opt_M,
-      $opt_D);    # Getopt output
+
+# Options:
+our (
+	$opt_help, $opt_verbose, $opt_defaults,
+	$opt_host, $opt_lang, $opt_username, $opt_password, 
+		$opt_wiki_path, $opt_space_sub,
+	$opt_message, $opt_watch, $opt_minor,
+);
+$opt_verbose = 0;
+
+# Multi-state options:
+use constant OPTION_STATES => (
+	yes     => OPT_YES,
+	no      => OPT_NO,
+	keep    => OPT_KEEP,
+	default => OPT_DEFAULT,
+);
+
 our $VERSION = $WWW::Mediawiki::Client::VERSION;
 
 my $LOGFILE = '.mediawiki.errors';
-
-$Getopt::Std::STANDARD_HELP_VERSION = 1;
 
 ##############################################################################
 # Subroutines                                                                #
@@ -35,45 +47,46 @@ sub print_defaults {
 }
 
 sub main {
-    my ($command, $file) = @_;
-    print_defaults if $opt_D;
+    my ($command, @files) = @_;
+    print_defaults if $opt_defaults;
     pod2usage unless $command;
     my $method= "do_$command";
     # do help if indicated
-    pod2usage(-verbose => 1) if $opt_h;
+    pod2usage(-verbose => 1) if $opt_help;
     # create the init array, and maybe pre-populate it
     my $wmc = WWW::Mediawiki::Client->new();
     unless ($wmc->can($method)) {
         print "Command \"$command\" not supported.\n\n";
         pod2usage(-verbose => 1);
     }
-    $wmc->host($opt_d) if $opt_d;
-    $wmc->commit_message($opt_m) if $opt_m;
-    $wmc->username($opt_u) if $opt_u;
-    $wmc->language_code($opt_l) if $opt_l;
-    $wmc->password($opt_p) if $opt_p;
-    $wmc->space_substitute($opt_s) if $opt_s;
-    $wmc->wiki_path($opt_w) if $opt_w;
-    $wmc->minor_edit(1) if $opt_M;
-    $wmc->watch(1) if $opt_W;
+    $wmc->host($opt_host) if $opt_host;
+    $wmc->commit_message($opt_message) if $opt_message;
+    $wmc->language_code($opt_lang) if $opt_lang;
+    $wmc->username($opt_username) if $opt_username;
+    $wmc->password($opt_password) if $opt_password;
+    $wmc->space_substitute($opt_space_sub) if $opt_space_sub;
+    $wmc->wiki_path($opt_wiki_path) if $opt_wiki_path;
+    $wmc->minor_edit($opt_minor) if defined($opt_minor);
+    $wmc->watch($opt_watch) if defined($opt_watch);
     # run command
-    $file = '' unless $file;
-    my $message = "Doing $command $file with host: " 
-                . $wmc->host . " and lang: "
-                . $wmc->language_code . "\n";
-    my $watch = $wmc->watch ? 'yes' : 'no';
-    my $minor = $wmc->minor_edit ? 'yes' : 'no';
+    my $message = "Doing $command ";
+    $message .= @files ? join(' ', @files) . ' ' : '';
+    $message .= "with host: " 
+              . $wmc->host . " and lang: "
+              . $wmc->language_code . "\n";
+    my $watch = multistate_text($wmc->watch);
+    my $minor = multistate_text($wmc->minor_edit);
     $message .= "    wiki_path: " . $wmc->wiki_path . "\n"
               . "    space_substitute: " . $wmc->space_substitute . "\n"
               . "    watch this page?: $watch\n" 
               . "    minor edit?: $minor\n"
-            if $opt_v;
-    print $message unless $opt_q;
-    eval { $wmc->$method($file) };
+            if $opt_verbose >= 1;
+    print $message unless $opt_verbose <= -1;
+    eval { $wmc->$method(@files) };
     if (UNIVERSAL::isa($@, 'WWW::Mediawiki::Client::Exception')) {
         open (LOG, ">>$LOGFILE");
         print LOG "\n-----------------\n$@";
-        warn "\n-----------------\n$@" if $opt_v and ! $opt_q;
+        warn "\n-----------------\n$@" if $opt_verbose >= 1;
         if ($@->isa('WWW::Mediawiki::Client::LoginException')) {
             print LOG Data::Dumper->Dump([$@->res], ['res'] ) . "\n";
             print LOG Data::Dumper->Dump([$@->cookie_jar], ['cookie_jar']) . "\n";
@@ -85,8 +98,15 @@ sub main {
             print LOG Data::Dumper->Dump([$@->res], ['res']) . "\n";
         }
         warn $@->error . " See $LOGFILE for details.\n" ;
+    } elsif ($@) {
+	die $@;
     }
-    print $wmc->status . " $file\n" if $wmc->status;
+    return 1 unless $wmc->status;
+    my %status = %{$wmc->status};
+    foreach my $file (keys %status) {
+        print $status{$file} . " $file\n" if $status{$file};
+    }
+    return 1;
 }
 
 sub HELP_MESSAGE {
@@ -98,10 +118,94 @@ sub VERSION_MESSAGE {
     print $fh "Mediawiki versioning system version $VERSION\n";
 }
 
+sub parse_command {
+	local @ARGV = @{$_[0]};
+
+	my $command;
+	Getopt::Long::Configure('bundling', 'pass_through');
+	Getopt::Long::GetOptions('<>' => sub {
+		$command = $_[0] unless $command;
+	});
+
+	return $command;
+}
+
+sub multistate_map {
+	my @states = @_;
+
+	my %states = OPTION_STATES;
+	my %statemap;
+	foreach my $state (@states) {
+		$statemap{$state} = $states{$state};
+	}
+	return \%statemap;
+}
+
+sub multistate_text {
+	my ($value) = @_;
+	return 'not set' unless defined($value);
+
+	my %states = OPTION_STATES;
+	my %reverse = map {$states{$_} => $_} keys %states;
+	return $reverse{$value} if defined($reverse{$value});
+	return 'unknown';
+}
+
+sub multistate_option {
+	my ($ref, @states) = @_;
+
+	my $statemap = multistate_map(@states);
+
+	return sub {
+		my ($name, $value) = @_;
+		my $state = $statemap->{lc($value)};
+		die "Unknown setting for $name: $value\n"
+			. "Valid settings: " . join(', ', @states) . "\n"
+			unless defined($state);
+		${$ref} = $state;
+	};
+}
+
+sub parse_options {
+	my $command = shift;
+	local @ARGV = @{$_[0]};
+
+	my @addit;
+	@addit = (
+		'host|d=s'	=> \$opt_host,
+		'lang|l=s'	=> \$opt_lang,
+		'username|u=s'	=> \$opt_username,
+		'password|p=s'	=> \$opt_password,
+		'wikipath|w=s'	=> \$opt_wiki_path,
+		'spaces|S=s'	=> \$opt_space_sub,
+	) if $command eq 'login';
+	@addit = (
+		'message|summary|m|s=s'	=> \$opt_message,
+		'minor=s'	=> multistate_option(
+			\$opt_minor, qw(yes no default)),
+		'watch=s'	=> multistate_option(
+			\$opt_watch, qw(yes no default keep)),
+		'M'		=> sub { $opt_minor = OPT_YES },
+		'W'		=> sub { $opt_watch = OPT_YES },
+	) if $command eq 'commit' or $command eq 'com' 
+		or $command eq 'preview';
+
+	Getopt::Long::Configure(
+		'no_ignore_case', 'bundling', 'no_pass_through');
+	Getopt::Long::GetOptions(
+		'verbose|v'	=> sub { $opt_verbose++ },
+		'quiet|q'	=> sub { $opt_verbose-- },
+		'help|h'	=> \$opt_help,
+		@addit,
+	) or exit(-1);
+
+	return @ARGV;
+}
 
 # parse command line
-getopts('hqvDMWw:d:m:u:p:s:l:');
-main (@ARGV);
+my $command = parse_command(\@ARGV);
+my @args = parse_options($command, \@ARGV);
+main (@args);
 
 __END__
 
@@ -120,13 +224,14 @@ mvs - A command line Mediawiki client
   mkdir wikistuff
   cd wikistuff
 
-  mvs [-q|-v] [-d <wikihost>] [-l language_code ] [-u <username>] [-p <password> ] [-w <wiki_path>] login
+  mvs [-q|-v] login [-d <wikihost>] [-l language_code ] [-u <username>] [-p <password> ] [-w <wiki_path>] 
 
   mvs [-q|-v] update [<file> ..]
   mvs [-q|-v] up [<file> ..]
 
-  mvs [-q|-v] [-M] [-W] -m "commit message" commit [<file> ..]
-  mvs [-q|-v] [-M] [-W] -m "commit message" com [<file> ..]
+  mvs [-q|-v] commit [-M] [-W] -m "commit message" <file>
+  mvs [-q|-v] com [-M] [-W] -m "commit message" <file>
+  mvs [-q|-v] preview [-M] [-W] [-m "commit message"] <file>
 
 =head1 DESCRIPTION
 
@@ -139,11 +244,18 @@ changes back to the version of the page on the server.
 The C<mvs> commands which take a filename argument only accept a single
 filename as so to avoid taking up too much server bandwidth.
 
+B<Note:>Users of C<mvs> from before version 0.27 will notice that in this
+documentation the options are mostly listed after the C<mvs> sub-command.
+This makes C<mvs> behave more like C<cvs>, C<svn>, or C<tla>, and so should
+make it easier for people who are used to using those programs.  If you
+prefer to use C<mvs> the old way, that will still work, at least for the
+next few versions.
+
 =head1 QUICKSTART
 
 =head2 Step 1:  Create an account on the Mediawiki server.
 
-This should be done the normal way, by visiting the mediawiki website to
+This should be done the normal way, by visiting the Mediawiki website to
 which you want to contribute and creating a new account, setting the
 preferences, etc.
 
@@ -154,11 +266,11 @@ learn about following recent changes before contributing using mvs.
 
 In addition for the sake of this test you should already have a user page
 like User:<username> with something on it, where <username> is the user
-name with which you estabilished the account.
+name with which you established the account.
 
 =head2 Step 2:  Create a working directory
 
-Wix works with mediawiki formatted files with a C<.wiki> extension and
+C<mvs> works with Mediawiki formatted files with a C<.wiki> extension and
 which are stored together with server information in a I<working directory>.  
 You will have to have I<at least> one working directory for each Mediawiki
 site to which you contribute.
@@ -180,28 +292,27 @@ to which you want to contribute.
 
 Now use the I<host> with your username and password to login.
 
-  mvs -d www.wikitravel.org -u <username> -p 'secret' login
+  mvs login -d www.wikitravel.org -u <username> -p 'secret'
 
-If C<mvs> knows about your mediawiki host it will set set the
+If C<mvs> knows about your Mediawiki host it will set set the
 C<wiki_path> to the correct default for that server.  In this case it will
 also be able to select the language version of that Wiki for you if you
 specify a C<language_code>:
 
-  mvs -d www.wikitravel.org -l fr -u <username> -p 'secret' login
+  mvs login -d www.wikitravel.org -l fr -u <username> -p 'secret' 
 
 The code must match the one which your wiki host uses for a given language,
 and of course the language version must exist for the given host.
 
-If your mediawiki install uses a nonstandard path to the wiki script you
+If your Mediawiki install uses a nonstandard path to the wiki script you
 can specify it on login.  The path to the wiki script is the part of the
 URL after the host name, and before the '?':
 
-  mvs \
+  mvs login \
     -d www.wikitravel.org \
     -u <username> \
     -p 'secret' \
-    -w 'mw/wiki.phtml' \
-    login
+    -w 'mw/wiki.phtml'
 
 You can change the edit and action paths in the created .mediawiki
 file after successful login accordingly.
@@ -249,7 +360,7 @@ welcome to create one and submit it to the page above.
 When you are done editing a file and would like to submit your changes to
 the wiki server use C<mvs commit> to do so:
 
-  mvs -m 'commit message' commit User:<username>.wiki
+  mvs commit -m 'commit message' User:<username>.wiki
 
 Where 'commit message' is whatever you want to say about the changes you
 are submitting and why.  You must provide a commit message or C<mvs commit>
@@ -266,24 +377,34 @@ the files as they exist in your working directory.  Note that update and
 commit only work on one file at a time, as so to help prevent accidents and
 server congestion.
 
-If for some reason there is a conflict, ie. you and someone else have made
+If for some reason there is a conflict, i.e. you and someone else have made
 changes which appear to be incompatible, and cannot be resolved then your
 file will contain a I<conflict message>, as detailed in the documentation
-for C<mvs update> below.  You I<must> resolve any conficts I<before>
+for C<mvs update> below.  You I<must> resolve any conflicts I<before>
 attempting to use C<mvs commit> on the file.  This is usually a very simple
 matter of choosing one version of the change or another.  You should use
-your best judgement, consulting the relavant C<Talk:> page to try to work
-out an aggreement with the other contributor in cases where you just simply
+your best judgement, consulting the relevant C<Talk:> page to try to work
+out an agreement with the other contributor in cases where you just simply
 disagree.
 
 =head2 Repeat
 
-You can continue editing and commiting changes with the files in your
+You can continue editing and committing changes with the files in your
 working directory.  It might be a good idea for you to eventually create
 multiple working directories per site, perhaps grouping them by subject.
 This will work fine with C<mvs> since it does I<not> need to have a
 complete copy of all of the pages from a given server in a given working
 directory to work.
+
+=head1 CHARACTER ENCODING
+
+All of your C<.wiki> files should be stored with UTF-8 encoding.  Upon
+login to a given server mvs will determine the encoding used by that
+server, and will upload in that encoding only.  For servers using non-UTF-8
+character sets you should use HTML entities for any character you want to
+represent which is outside of the server's character set.  This includes
+the english Wikipedia.  Most newer Mediawiki sites however do use UTF-8, on
+these sites HTML entities are I<never> needed.
 
 =head1 ARGUMENTS
 
@@ -297,7 +418,7 @@ commands:
 =item mvs login
 
 Allows the user to login to the Mediawiki server using an I<existing> login
-and password for that server.  After calling C<login> ll C<commit>s from
+and password for that server.  After calling C<login> all C<commit>s from
 the same working directory will be logged as from the logged-in user.
 
 =item mvs update
@@ -306,7 +427,7 @@ Updates the specified file[s] with content from the Mediawiki server.  If a
 file does not exist it is created and populated with the current online
 version.  If there is no online version, the file either created and left
 blank, or just left as it is.  If there is content in both the specified
-file and in the cooresponding Wiki page, an attempt is made to merge the
+file and in the corresponding Wiki page, an attempt is made to merge the
 two, line by line.  Files which are the same as the server version are
 ignored.
 
@@ -317,7 +438,7 @@ Conflicting changes to a given line are detected on the basis of the date
 of the most recent update of the local file and date of the most recent
 change to the online Wiki page.  If a line has changed in both the online
 page and the local file it is flagged as a conflict, as in CVS, but with a
-slightly differnt syntax:
+slightly different syntax:
 
   ********************Start of conflict 1  Insert to Primary, Insert to Secondary ************************************************************
 
@@ -328,7 +449,7 @@ slightly differnt syntax:
   The line as it appears locally
   ********************End of conflict 1********************************************************************************
 
-C<mvs update> reports the status of files which it touches to stderr with
+C<mvs update> reports the status of files which it touches to STDERR with
 a letter indicating the file status, and then name of the file, again like
 CVS.  The status letters are:
 
@@ -356,26 +477,37 @@ The file contains conflict markers.
 
 =item ? (Unknown)
 
-Neither the file, nor a cooresponding server page exist.
+Neither the file, nor a corresponding server page exist.
 
 =back
 
 =item commit
 
-Commits any changes in the specified local files to the Wiki site.  A check
+Commits any changes in the specified local file to the Wiki site.  A check
 is made first to make sure that there are no changes on the server more
-recent than the most recent update.  Files which are the same as the server
-version are ignored.
-
-If no filenames are given on the command line, all visible files with the
-.wiki extension are processed.
+recent than the most recent update.  Nothing will be comitted if the file 
+and server version are identical.
 
 When running C<mvs commit> you I<must> use the C<-m> flag to send a commit
-message to the Mediawiki server.  eg:
+message to the Mediawiki server.  e.g.:
 
-  mvs -m 'Added Hotel Eldorado' commit Paris.wiki
+  mvs commit -m 'Added Hotel Eldorado' Paris.wiki
 
-=back
+=item preview
+
+This command functions identically to C<mvs commit>, except that nothing is
+actually committed.  Instead, the file is uploaded and the Mediawiki server
+sends back a formatted preview.  The C<-m> flag is optional.  If you set
+the L<MVS_BROWSER> environmental variable to the path and filename of your
+favorite browser, mvs will launch it with the preview page.
+
+=item clean
+
+This command removes any local version reference files relating to
+pages you've deleted.
+
+  rm Paris.wiki
+  mvs clean
 
 =head2 File names
 
@@ -417,17 +549,36 @@ versions.
 A commit message for C<mvs commit>.  Use this to explain the nature of your
 changes.
 
+=head2 -s "<your message>"
+
+Same as C<-m>
+
+=head2 --minor <yes|no|default>
+
+Choose whether to mark change as a minor edit.  The default is to mark
+changes as minor if the Mediawiki user profile is set to do so by
+default.  Use this when committing a change with C<mvs commit> or
+previewing with C<mvs preview>.
+
 =head2 -M
 
-This is a minor edit.  Use this when commintting a change with C<mvs commit>.
+Same as C<--minor yes>.
+
+=head2 --watch <yes|no|keep|default>
+
+Choose whether to add the edited page to your watchlist.  Specifying
+C<keep> will maintain the current watched status.  The default is to
+watch the page if it is already being watched, or if the Mediawiki
+user profile is set to do so by default.  Use this when committing a
+change with C<mvs commit> or previewing with C<mvs preview>.
 
 =head2 -W
 
-Add this page to your watchlist.
+Same as C<--watch yes>.
 
 =head2 -w "<wiki path>"
 
-The path on the given C<host> to the mediawiki script.  This defaults to
+The path on the given C<host> to the Mediawiki script.  This defaults to
 I<wiki/wiki.phtml> which is correct for a vanilla install of Mediawiki
 1.4.x.
 
@@ -436,10 +587,23 @@ I<wiki/wiki.phtml> which is correct for a vanilla install of Mediawiki
 Verbose.  If this is set C<mvs> will give you lots of extra information
 about what it's doing.  The -q flag overrides this.
 
+=head1 ENVIRONMENTAL VARIABLES
+
+=head2 MVS_BROWSER
+
+The browser you prefer to use for previewing changes.
+
+=head2 HTTP_PROXY
+
+A proxy server to use (if any), expressed as a standard URL, something like
+this:
+
+  export HTTP_PROXY=http://[username:password@]proxy.myorg.org:8080
+
 =head1 CAVEATS
 
 This is an early version of this program.  Future versions may have major
-differences which will effect your ability to use them interchangably with
+differences which will effect your ability to use them interchangeably with
 this one.  In particular the initial "command" arguments may become
 options and the handling of conflicts might change dramatically.
 
@@ -474,6 +638,11 @@ Improved error and usage messages.
 =item Oleg Alexandrov <aoleg@math.ucla.edu>, Thomas Widmann <twid@bibulus.org>
 
 Bug reports and feedback.
+
+=item Adrian Irving-Beer <wisq@wisq.net>
+
+Preview support, export support for multi-page update, more 'minor'
+and 'watch' settings, and bug reports.
 
 =head1 COPYRIGHT
 

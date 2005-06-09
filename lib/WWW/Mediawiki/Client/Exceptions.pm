@@ -100,6 +100,13 @@ use Exception::Class (
             description => 'Client code tried to set a read-only field.',
         },
 
+    'WWW::Mediawiki::Client::InvalidOptionException' =>
+        { 
+            isa => 'WWW::Mediawiki::Client::Exception',
+            description => 'Client code tried to set an option to a value'
+	    	. ' that cannot be used under the circumstances.',
+	    fields => ['field', 'option', 'value'],
+        },
 );
 
 WWW::Mediawiki::Client::Exception->Trace(1);
@@ -108,7 +115,9 @@ WWW::Mediawiki::Client::Exception->Trace(1);
 
 __END__
 
-=head1 NAME WWW::Mediawiki::Client::Exception
+=head1 NAME
+
+WWW::Mediawiki::Client::Exception
 
 =head1 SYNOPSIS
 

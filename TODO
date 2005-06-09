@@ -1,32 +1,21 @@
-Wix TODOs
+* Preview functionality (dump to file or run web browser) (0.27)
 
-This is stuff that could be done to wix to make it more useable.
+* Re-Add the ability to handle multiple files and recursion. (target: 0.27)
 
-* Since wix can only operate on one file at a time there is now way to
-  easily see which files have been altered locally.  This feature should be
-  added.
+* Using Special:Export page for faster updates and less load (uses XML::LibXML, but could easily use a lighter SAX parser). (from Adrian Irving-Beer)
 
-* Wix currently always marks pages as watched.  Consider storing the entire
-  html file as ref so that we can do this according to the Mediawiki user 
-  preference.
+* Change to Getopt::Long to support options anywhere in command. (from Adrian Irving-Beer)
 
-* Wix does not work with images or other files.  This could stand to
-  change.
+* Add a flag allowing the user to choose whether to proceed with commits if not logged in. (target: 0.27)
 
-* Make more use of the output levels in general (or scrap them)
+* Add a mechanism for checking if mvs is run in the right directory level (0.28)
 
-* Consider switching to Wikimedia's conflict resolution facility
-
-* Add a do_status command for checking login status
-
-* Add a mechanism for checking if wix is run in the right directory level
-
-* Switch to Exception::Class from regular die exceptions (Carp appears to
-  be broken for some uses).
-
-* Perhaps separate the language code from the Base URL
+* Add a command to return a diff between the local version and the server version. (0.28)
 
 * Add a commit comment editor
 
-* Add user override for commiting text in which there might be conflicts
+* Figure out some to remember if the page is on the user's watchlist.  Perhaps this will have to be done in the Mediawiki codebase.
+
+* Image handling, upload and download of images
+
 

@@ -1,33 +1,32 @@
 #!/usr/bin/perl -w
 
-use Test::More tests => 85;
+use strict;
+use Test::More tests => 95;
 use Test::Differences;
 
 BEGIN {
-    use_ok('WWW::Mediawiki::Client');
+    use_ok('WWW::Mediawiki::Client', ':options');
 }
 
-# Fields
-my ($HtmlData, $WikiData, $mvs);
-
 # test the constructor first
+my $mvs;
 ok($mvs = WWW::Mediawiki::Client->new(host => 'localhost/'), 
         'Can instanciate a WWW::Mediawiki::Client object');
 
 # load the test data
 undef $/;
-ok(open(IN, "t/files/paris.html"), 'Can open our test HTML');
-$HtmlData = <IN>;
-ok(open(IN, "t/files/paris.wiki"), 'Can open our test Wiki file');
-$WikiData = <IN>;
-ok(open(IN, "t/files/reference.wiki"), 'Can open the reference Wiki file');
-$RefData= <IN>;
-ok(open(IN, "t/files/local.wiki"), 'Can open the local Wiki file');
-$LocalData= <IN>;
-ok(open(IN, "t/files/server.wiki"), 'Can open the server Wiki file');
-$ServerData= <IN>;
-ok(open(IN, "t/files/merged.wiki"), 'Can open our merged Wiki file');
-$MergedData= <IN>;
+ok(open(IN, "<:utf8", "t/files/paris.html"), 'Can open our test HTML');
+my $HtmlData = <IN>;
+ok(open(IN, "<:utf8", "t/files/paris.wiki"), 'Can open our test Wiki file');
+my $WikiData = <IN>;
+ok(open(IN, "<:utf8", "t/files/reference.wiki"), 'Can open the reference Wiki file');
+my $RefData = <IN>;
+ok(open(IN, "<:utf8", "t/files/local.wiki"), 'Can open the local Wiki file');
+my $LocalData = <IN>;
+ok(open(IN, "<:utf8", "t/files/server.wiki"), 'Can open the server Wiki file');
+my $ServerData = <IN>;
+ok(open(IN, "<:utf8", "t/files/merged.wiki"), 'Can open our merged Wiki file');
+my $MergedData = <IN>;
 close IN;
 $/= "\n";
 chomp ($RefData, $ServerData, $LocalData, $MergedData);
@@ -48,10 +47,10 @@ is($mvs->filename_to_url('San_Francisco.wiki', 'submit'),
         'http://localhost/wiki/wiki.phtml?action=submit&title=San_Francisco',
         'Can we convert the filename to the URL?');
 eval { $mvs->filename_to_url('/this/is/an/absolute/filename.wiki') };
-isa_ok($@, WWW::Mediawiki::Client::AbsoluteFileNameException,
+isa_ok($@, 'WWW::Mediawiki::Client::AbsoluteFileNameException',
         'Does filename_to_url throw an exception for absolute filenames?');
 eval { $mvs->filename_to_url('foo/bar.foo') };
-isa_ok($@, WWW::Mediawiki::Client::FileTypeException,
+isa_ok($@, 'WWW::Mediawiki::Client::FileTypeException',
         'Does filename_to_url throw an exception for non .wiki files?');
 
 
@@ -186,15 +185,19 @@ is($mvs->commit_message, 'yo', '... and get back the string we changed it to');
 
 # test the watch accessor
 $mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
-is($mvs->watch, 0, 'Is the watch 0 by default?');
-ok($mvs->watch(1), '... and can we change it');
-is($mvs->watch, 1, '... and get back the value we changed it to');
+is($mvs->watch, OPT_DEFAULT, 'Is the watch OPT_DEFAULT by default?');
+foreach my $val (OPT_YES, OPT_NO, OPT_DEFAULT, OPT_KEEP) {
+    is($mvs->watch($val), $val, '... and can we change it');
+    is($mvs->watch, $val, '... and get back the value we changed it to');
+}
 
 # test the minor_edit accessor
 $mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
-is($mvs->minor_edit, 0, 'Is the minor_edit 0 by default?');
-ok($mvs->minor_edit(1), '... and can we change it');
-is($mvs->minor_edit, 1, '... and get back the value we changed it to');
+is($mvs->minor_edit, OPT_DEFAULT, 'Is the minor_edit OPT_DEFAULT by default?');
+foreach my $val (OPT_YES, OPT_NO, OPT_DEFAULT) {
+    is($mvs->minor_edit($val), $val, '... and can we change it');
+    is($mvs->minor_edit, $val, '... and get back the value we changed it to');
+}
 
 # test the status accessor (should be undef)
 $mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
@@ -205,15 +208,18 @@ isa_ok($@, 'WWW::Mediawiki::Client::ReadOnlyFieldException',
         '... and throws an exception if you try to set it');
 
 # test get_local_page
-open(OUT, '>Paris.wiki');
+open(OUT, '>:utf8', 'Paris.wiki');
 print OUT $WikiData;
 close OUT;
-is($mvs->get_local_page('Paris.wiki'), $WikiData, 'Can get_local_page');
-chmod 0200, 'Paris.wiki';
+eq_or_diff($mvs->get_local_page('Paris.wiki'), $WikiData, 'Can get_local_page');
 # test for WWW::Mediawiki::Client::FileAccessException
-eval { $mvs->get_local_page('Paris.wiki') };
-isa_ok($@, 'WWW::Mediawiki::Client::FileAccessException',
-        '... and throws an exception if the file is unreadable');
+SKIP: {
+    chmod 0200, 'Paris.wiki';
+    skip("Can't deny access to file.  (Are you root?)", 1) if -r 'Paris.wiki';
+    eval { $mvs->get_local_page('Paris.wiki') };
+    isa_ok($@, 'WWW::Mediawiki::Client::FileAccessException',
+	    '... and throws an exception if the file is unreadable');
+}
 # test for WWW::Mediawiki::Client::FileTypeException
 eval { $mvs->get_local_page('foo.bar') };
 isa_ok($@, 'WWW::Mediawiki::Client::FileTypeException',
@@ -270,11 +276,11 @@ is($mvs->url_to_filename('http://www.wikifoo.org/wiki/en/wiki.phtml?action=edit&
         '... with underscores too.');
 
 # test list_wiki_files
-open(OUT, '>foo.wiki');
+open(OUT, '>:utf8', 'foo.wiki');
 print OUT 'foo';
 close OUT;
 mkdir 'foo';
-open(OUT, '>foo/bar.wiki');
+open(OUT, '>:utf8', 'foo/bar.wiki');
 print OUT 'bar';
 close OUT;
 my @expect = qw(Paris.wiki foo.wiki foo/bar.wiki);

@@ -1,5 +1,6 @@
 #!/usr/bin/perl -w
 
+use strict;
 use Test::More;
 use Test::Differences;
 use WWW::Mediawiki::Client;
@@ -96,7 +97,8 @@ isa_ok($@, 'WWW::Mediawiki::Client::LoginException',
 $mvs = WWW::Mediawiki::Client->new();
 $mvs->load_state;
 eval { $mvs->do_login };
-is($mvs->do_update('apoaijselknaeroinqweproiuqwrehasdfnfuwreg.wiki'), 
+my $nosuchfile = 'apoaijselknaeroinqweproiuqwrehasdfnfuwreg.wiki';
+is($mvs->do_update($nosuchfile)->{$nosuchfile}, 
         WWW::Mediawiki::Client::STATUS_UNKNOWN,
         'Update returns correct status for totally new file');
 
@@ -104,7 +106,7 @@ is($mvs->do_update('apoaijselknaeroinqweproiuqwrehasdfnfuwreg.wiki'),
 $mvs = WWW::Mediawiki::Client->new();
 $mvs->load_state;
 eval { $mvs->do_login };
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_LOCAL_ADDED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_LOCAL_ADDED,
         'Update returns correct status for new local file');
 
 # Test do_commit with same new local file
@@ -119,16 +121,16 @@ eq_or_diff($mvs->get_server_page($pagename), $WIKIDATA,
         '... and did it really result in the right data going onto the page?');
 
 # do_update with a new file and then delete it
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_UNCHANGED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_UNCHANGED,
         '... and when we do update with the same file, the status should be
         unchanged');
 
 unlink $Testfile;
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_SERVER_MODIFIED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_SERVER_MODIFIED,
         '... then after deleting the file it should show up as server modified');
 
 # Test do_update again, this time to see if the file is downloaded correctly
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_UNCHANGED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_UNCHANGED,
         '... and since the last update got the server version another one
         should report unchanged.');
 
@@ -140,13 +142,13 @@ print OUT qq{
 Testing the ability to detect local changes.
 };
 close OUT;
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_LOCAL_MODIFIED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_LOCAL_MODIFIED,
         '... then after changing the file it should show up as locally modified');
 
 # do_commit to save the modifications
 ok($mvs->do_commit($Testfile), '... and can we save our modifications?');
 # Test do_update again, this time to see if the file is downloaded correctly
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_UNCHANGED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_UNCHANGED,
         '... and since the commit put our version on the server do_update
         should report unchanged.');
 
@@ -157,7 +159,7 @@ open(OUT, '>' . WWW::Mediawiki::Client->CONFIG_FILE)
 print OUT $Conf;
 close OUT;
 
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_SERVER_MODIFIED,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_SERVER_MODIFIED,
         'Starting in a new directory the test page should be server modified.');
 open (OUT, ">>$Testfile");
 print OUT qq{
@@ -192,7 +194,7 @@ eval { $mvs->do_commit($Testfile) };
 isa_ok($@, 'WWW::Mediawiki::Client::UpdateNeededException',
         '... in other dir, commit should refuse to work before update.');
 
-is($mvs->do_update($Testfile), WWW::Mediawiki::Client::STATUS_CONFLICT,
+is($mvs->do_update($Testfile)->{$Testfile}, WWW::Mediawiki::Client::STATUS_CONFLICT,
         '... and when we do the update there should be a conflict');
 
 
