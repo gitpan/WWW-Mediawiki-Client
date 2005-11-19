@@ -24,6 +24,7 @@ WriteMakefile(
             'Data::Dumper' => 0,
             'Exception::Class' => 0,
             'Encode' => 1.75,
+            'Encode::Guess' => 0,
         },
 );
 

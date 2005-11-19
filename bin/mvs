@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w 
+
 use strict;
-use WWW::Mediawiki::Client ':options';
+use WWW::Mediawiki::Client;
 use Getopt::Long ();
 use Pod::Usage;
 use Data::Dumper;
@@ -13,17 +14,17 @@ use Data::Dumper;
 our (
 	$opt_help, $opt_verbose, $opt_defaults,
 	$opt_host, $opt_lang, $opt_username, $opt_password, 
-		$opt_wiki_path, $opt_space_sub,
+        $opt_version, $opt_wiki_path, $opt_space_sub,
 	$opt_message, $opt_watch, $opt_minor,
 );
 $opt_verbose = 0;
 
 # Multi-state options:
 use constant OPTION_STATES => (
-	yes     => OPT_YES,
-	no      => OPT_NO,
-	keep    => OPT_KEEP,
-	default => OPT_DEFAULT,
+	yes     => WWW::Mediawiki::Client->OPT_YES,
+	no      => WWW::Mediawiki::Client->OPT_NO,
+	keep    => WWW::Mediawiki::Client->OPT_KEEP,
+	default => WWW::Mediawiki::Client->OPT_DEFAULT,
 );
 
 our $VERSION = $WWW::Mediawiki::Client::VERSION;
@@ -49,6 +50,7 @@ sub print_defaults {
 sub main {
     my ($command, @files) = @_;
     print_defaults if $opt_defaults;
+    version_message() if $opt_version;
     pod2usage unless $command;
     my $method= "do_$command";
     # do help if indicated
@@ -113,9 +115,9 @@ sub HELP_MESSAGE {
     pod2usage(-verbose => 1);
 }
 
-sub VERSION_MESSAGE {
-    my $fh = shift;
-    print $fh "Mediawiki versioning system version $VERSION\n";
+sub version_message {
+    print "Mediawiki versioning system version $VERSION\n";
+    exit 1;
 }
 
 sub parse_command {
@@ -169,7 +171,7 @@ sub multistate_option {
 sub parse_options {
 	my $command = shift;
 	local @ARGV = @{$_[0]};
-
+    $command ||= "";
 	my @addit;
 	@addit = (
 		'host|d=s'	=> \$opt_host,
@@ -185,8 +187,8 @@ sub parse_options {
 			\$opt_minor, qw(yes no default)),
 		'watch=s'	=> multistate_option(
 			\$opt_watch, qw(yes no default keep)),
-		'M'		=> sub { $opt_minor = OPT_YES },
-		'W'		=> sub { $opt_watch = OPT_YES },
+		'M'		=> sub { $opt_minor = WWW::Mediawiki::Client->OPT_YES },
+		'W'		=> sub { $opt_watch = WWW::Mediawiki::Client->OPT_YES },
 	) if $command eq 'commit' or $command eq 'com' 
 		or $command eq 'preview';
 
@@ -196,6 +198,7 @@ sub parse_options {
 		'verbose|v'	=> sub { $opt_verbose++ },
 		'quiet|q'	=> sub { $opt_verbose-- },
 		'help|h'	=> \$opt_help,
+                'version|V'     => \$opt_version,
 		@addit,
 	) or exit(-1);
 
@@ -648,6 +651,6 @@ and 'watch' settings, and bug reports.
 
 © Copyright 2004-2005, Mark Jaroski
 
-All rights reserved. This program is free software; you can redistribute it
-and/or modify it under the same terms as Perl itself.
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
 

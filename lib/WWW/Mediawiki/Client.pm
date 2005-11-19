@@ -17,6 +17,7 @@ use XML::LibXML ();
 use HTML::Entities qw(encode_entities);
 use File::Temp ();
 use Encode;
+use Encode::Guess;
 use utf8;
 
 BEGIN {
@@ -137,7 +138,7 @@ use constant SPECIAL_VERSION => 'Special:Version';
 
 =cut 
 
-our $VERSION = 0.27;
+our $VERSION = 0.28;
 
 =head2 Update Status
 
@@ -292,7 +293,7 @@ use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 use constant SAVED_ATTRIBUTES => (
     qw(site_url host language_code space_substitute username password 
-       wiki_path watch encoding minor_edit)
+       wiki_path watch encoding minor_edit escape_filenames)
 );  # It's important that host goes first since it has side effects
 
 
@@ -432,6 +433,29 @@ sub space_substitute {
     $self->{space_substitute} = SPACE_SUBSTITUTE 
             unless $self->{space_substitute};
     return $self->{space_substitute};
+}
+
+=head2 escape_filenames
+
+  my $char = $mvs->escape_filenames($do_escape);
+
+Mediawiki allows article names to be in UTF-8 and most international
+Wikipedias use this feature. That leads us to UTF-8 encoded file names
+and not all filesystems can handle them. So you can set this option to
+some true value to make all your local file names with wiki articles
+URL-escaped.
+
+=cut
+
+sub escape_filenames {
+    my ($self, $do_escape) = @_;
+    if ($do_escape) {
+        $self->{escape_filenames} = $do_escape;
+    } elsif (!defined $self->{escape_filenames}) {
+        $self->{escape_filenames} = 0;
+    }
+
+    return $self->{escape_filenames};
 }
 
 =head2 wiki_path
@@ -1168,7 +1192,7 @@ sub get_server_page {
     $self->{edit}->{watch_now} = $self->_get_edit_is_watching($doc);
     $self->{edit}->{def_watch} = $self->_get_edit_watch_default($doc);
     $self->{edit}->{def_minor} = $self->_get_edit_minor_default($doc);
-    my $headline = $self->_get_page_headline($doc);
+    my $headline = Encode::encode("utf8", $self->_get_page_headline($doc));
     my $expected = lc $pagename;
     unless (lc($headline) =~ /$expected$/) {
         WWW::Mediawiki::Client::ServerPageException->throw(
@@ -1279,6 +1303,9 @@ sub filename_to_pagename {
     my ($self, $name) = @_;
     $self->_check_path($name);
     $name =~ s/.wiki$//;
+
+    $self->{escape_filenames} and $name = decode('UTF-8', URI::Escape::uri_unescape($name));
+
     $name =~ s/_/ /g;
     return ucfirst $name;
 }
@@ -1319,6 +1346,9 @@ name.
 sub pagename_to_filename {
     my ($self, $name) = @_;
     $name =~ s/ /_/;
+
+    $self->{escape_filenames} and $name = URI::Escape::uri_escape_utf8($name);
+    
     $name .= '.wiki';
     return $name;
 }
@@ -1392,7 +1422,8 @@ sub _get_server_encoding {
     my $p = HTML::TokeParser->new(\$doc);
     while ( my $t = $p->get_tag("meta") ) {
         next unless defined $t->[1]->{'http-equiv'}
-               and $t->[1]->{'http-equiv'} eq 'Content-Type';
+     and ($t->[1]->{'http-equiv'} eq 'Content-Type'
+     or $t->[1]->{'http-equiv'} eq 'Content-type');
         my $cont = $t->[1]->{'content'};
         $cont =~ m/charset=(.*)/;
         return $1;
@@ -1566,15 +1597,19 @@ sub _get_exported_pages {
     my $doc = $parser->parse_string($response->decoded_content);
     my %expecting = map {$_ => 1} @pages;
     my %export = ();
+    my %timestamp = ();
     foreach my $node ($doc->findnodes('/mediawiki/page')) {
         my $page = $node->findvalue(TITLE);
         my $text = $node->findvalue('revision/text');
+        my $time = $node->findvalue('revision/timestamp');
         WWW::Mediawiki::Client::ServerPageException->throw(
             error => "Server returned unexpected page '$page'.",
             res => $response) unless $expecting{$page};
         $export{$page} = $text;
+        $timestamp{$page} = $time;
     }
     $self->{export} = \%export;
+    $self->{timestamp} = \%timestamp;
 }
 
 sub _upload_file {
@@ -1589,12 +1624,15 @@ sub _upload_file {
     my $text = $self->get_local_page($filename);
     my $pagename = $self->filename_to_pagename($filename);
     my $sp = $self->get_server_page($pagename);
-    my $ref = $self->_get_reference_page($filename);
-    chomp ($text, $sp, $ref);
-    WWW::Mediawiki::Client::UpdateNeededException->throw(
-            error => $self->filename_to_pagename($filename) 
-                   . " has changed on the server.",
-        ) unless $sp eq $ref;
+    if ($self->{edit}->{date}) {
+        my $ref = $self->_get_reference_page($filename);
+        chomp ($sp, $ref);
+        WWW::Mediawiki::Client::UpdateNeededException->throw(
+                error => $self->filename_to_pagename($filename) 
+                       . " has changed on the server.",
+            ) unless $sp eq $ref;
+    }
+    chomp ($text);
     WWW::Mediawiki::Client::ConflictsPresentException->throw(
             "$filename appears to have unresolved conflicts")
         if $self->_conflicts_found_in($text);
@@ -1733,11 +1771,20 @@ Bug reports and feedback.
 Preview support, export support for multi-page update, more 'minor'
 and 'watch' settings, and bug reports.
 
+=item Nicolas Brouard <nicolas.brouard@libertysurf.fr>
+
+Fixed content-type bug.
+
+=item Alex Kapranoff <alex@kapranoff.ru>
+
+Added C<escape_filename> in order to support UTF-8 filenames on filesystems
+lacking UTF-8 support.
+
 =back
 
 =head1 LICENSE
 
-Copyright (c) 2004 Mark Jaroski. 
+Copyright (c) 2004-2005 Mark Jaroski. 
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

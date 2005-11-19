@@ -1,8 +1,10 @@
 #!/usr/bin/perl -w
 
 use strict;
-use Test::More tests => 95;
+use Test::More tests => 102;
 use Test::Differences;
+
+use utf8;
 
 BEGIN {
     use_ok('WWW::Mediawiki::Client', ':options');
@@ -207,6 +209,12 @@ eval { $mvs->status('foo') };
 isa_ok($@, 'WWW::Mediawiki::Client::ReadOnlyFieldException',
         '... and throws an exception if you try to set it');
 
+# test the escape_filenames accessor
+$mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
+is($mvs->escape_filenames, 0, 'Does the default escape_filenames get set?');
+ok($mvs->escape_filenames(1), '... and can we change it');
+is($mvs->escape_filenames, 1, '... and get back the string we changed it to');
+
 # test get_local_page
 open(OUT, '>:utf8', 'Paris.wiki');
 print OUT $WikiData;
@@ -264,7 +272,19 @@ is($mvs->pagename_to_filename('San Francisco'), 'San_Francisco.wiki',
         'pagename_to_filename can convert a page name into a filename');
 is($mvs->pagename_to_filename('User:Mark/Maps'), 'User:Mark/Maps.wiki',
         '... even the sub-page of a User page.');
-        
+
+$mvs->escape_filenames(0);
+is($mvs->pagename_to_filename('Нижний Новгород'), 'Нижний_Новгород.wiki',
+        'pagename_to_filename with Unicode');
+is($mvs->filename_to_pagename('Нижний_Новгород.wiki'), 'Нижний Новгород',
+        'filename_to_pagename with Unicode');
+
+$mvs->escape_filenames(1);
+is($mvs->pagename_to_filename('Нижний Новгород'), '%D0%9D%D0%B8%D0%B6%D0%BD%D0%B8%D0%B9_%D0%9D%D0%BE%D0%B2%D0%B3%D0%BE%D1%80%D0%BE%D0%B4.wiki',
+        'pagename_to_filename with Unicode escaping');
+is($mvs->filename_to_pagename('%D0%9D%D0%B8%D0%B6%D0%BD%D0%B8%D0%B9_%D0%9D%D0%BE%D0%B2%D0%B3%D0%BE%D1%80%D0%BE%D0%B4.wiki'), 'Нижний Новгород',
+        'filename_to_pagename with Unicode escaping');
+
 # test url_to_filename
 $mvs->space_substitute('+');
 is($mvs->url_to_filename('http://www.wikifoo.org/wiki/en/wiki.phtml?action=edit&title=San+Francisco'),

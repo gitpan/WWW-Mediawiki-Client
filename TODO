@@ -1,21 +1,35 @@
-* Preview functionality (dump to file or run web browser) (0.27)
+* Check for code 3xx redirects and try to reset the wiki_host value to the 
+  correct host to which we are redirected. (target: 0.28)
 
-* Re-Add the ability to handle multiple files and recursion. (target: 0.27)
+* Add a flag allowing the user to choose whether to proceed with commits if 
+  not logged in. (target: 0.28)
 
-* Using Special:Export page for faster updates and less load (uses XML::LibXML, but could easily use a lighter SAX parser). (from Adrian Irving-Beer)
+* Add a command to return a diff between the local version and the server 
+  version. (0.28)
 
-* Change to Getopt::Long to support options anywhere in command. (from Adrian Irving-Beer)
+* Image handling, upload and download of images
 
-* Add a flag allowing the user to choose whether to proceed with commits if not logged in. (target: 0.27)
+* Use of "Special:All pages" to return a list of every page in the host wiki
 
-* Add a mechanism for checking if mvs is run in the right directory level (0.28)
-
-* Add a command to return a diff between the local version and the server version. (0.28)
+* Image handling, upload and download of images
 
 * Add a commit comment editor
 
-* Figure out some to remember if the page is on the user's watchlist.  Perhaps this will have to be done in the Mediawiki codebase.
+* The ability to access data from robots.txt for use by programmers using the library to create Mediawiki bots
 
-* Image handling, upload and download of images
+* Multi-file commits which respect the delay between uploads as specified in robots.txt
+
+* Win32-Perl support
+
+* A *nix GUI (this could be done as an outside project)
+
+* Win 32 GUI (possibly like tortoise CVS or tortoise SVN)
+
+* A Vim plugin supporting mvs
+
+* An EMACS macro supporting mvs
+
+* A KDE Kate plugin for mvs
+
 
 
