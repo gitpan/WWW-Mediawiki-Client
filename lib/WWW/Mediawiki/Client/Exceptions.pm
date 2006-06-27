@@ -10,7 +10,7 @@ use Exception::Class (
     'WWW::Mediawiki::Client::URLConstructionException' =>
         { 
             isa => 'WWW::Mediawiki::Client::Exception',
-            description => 'Indicates a problem with the URL with which we to the Mediawiki server.',
+            description => 'Indicates a problem with the URL with which we to call the Mediawiki server.',
         },
 
     'WWW::Mediawiki::Client::AuthException' => 

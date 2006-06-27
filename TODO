@@ -1,3 +1,13 @@
+
+I think at this point a more or less complete rewrite is in order, and so
+I'll be working on that over the next month or so.  My idea is to make the
+API a lot more OO.  For some reason I was having an anti-OO fit when I
+wrote this in the first place.  I seem to have recovered.
+
+-- mark, Tuesday 27 June 2006
+
+---------------------------------------------------------------------------
+
 * Check for code 3xx redirects and try to reset the wiki_host value to the 
   correct host to which we are redirected. (target: 0.28)
 

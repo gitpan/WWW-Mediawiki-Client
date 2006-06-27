@@ -30,6 +30,7 @@ my $ServerData = <IN>;
 ok(open(IN, "<:utf8", "t/files/merged.wiki"), 'Can open our merged Wiki file');
 my $MergedData = <IN>;
 close IN;
+$MergedData =~ s/^.//;
 $/= "\n";
 chomp ($RefData, $ServerData, $LocalData, $MergedData);
 
@@ -42,11 +43,11 @@ chdir $Testdir;
 
 # Test the filename method
 is($mvs->filename_to_url('San_Francisco.wiki', 'edit'),
-        'http://localhost/wiki/wiki.phtml?action=edit&title=San+Francisco',
+        'http://localhost/wiki/index.php?action=edit&title=San_Francisco',
         'Can we convert the filename to the URL?');
 $mvs->space_substitute('_');
 is($mvs->filename_to_url('San_Francisco.wiki', 'submit'),
-        'http://localhost/wiki/wiki.phtml?action=submit&title=San_Francisco',
+        'http://localhost/wiki/index.php?action=submit&title=San_Francisco',
         'Can we convert the filename to the URL?');
 eval { $mvs->filename_to_url('/this/is/an/absolute/filename.wiki') };
 isa_ok($@, 'WWW::Mediawiki::Client::AbsoluteFileNameException',
@@ -102,11 +103,11 @@ is($mvs->host, 'www.someotherwiki.org', 'retrieved correct host');
 unlink $conf_file;
 
 # test the Wikitravel defaults with new
-$mvs = WWW::Mediawiki::Client->new(host => 'www.wikitravel.org');
-is($mvs->wiki_path, 'wiki/__LANG__/index.php', 'Wikitravel defaults: wiki_path');
+$mvs = WWW::Mediawiki::Client->new(host => 'wikitravel.org');
+is($mvs->wiki_path, '__LANG__/index.php', 'Wikitravel defaults: wiki_path');
 is($mvs->space_substitute, '_', 'Wikitravel defaults: space_substitute');
 is($mvs->pagename_to_url('San Francisco', 'submit'),
-        'http://www.wikitravel.org/wiki/en/index.php?action=submit&title=San_Francisco',
+        'http://wikitravel.org/en/index.php?action=submit&title=San_Francisco',
         '... and convert the filename to the URL?');
 
 # test the Wikipedia defaults with new
@@ -118,11 +119,11 @@ is($mvs->pagename_to_url('San Francisco', 'submit'),
         '... and convert the filename to the URL?');
 
 # test the Wikitravel defaults with host
-ok($mvs->host('www.wikitravel.org'), 'Can change host to wikitravel');
-is($mvs->wiki_path, 'wiki/__LANG__/index.php', '... and get the right wiki_path');
+ok($mvs->host('wikitravel.org'), 'Can change host to wikitravel');
+is($mvs->wiki_path, '__LANG__/index.php', '... and get the right wiki_path');
 is($mvs->space_substitute, '_', '... and get the right space_substitute');
 is($mvs->pagename_to_url('San Francisco', 'submit'),
-        'http://www.wikitravel.org/wiki/en/index.php?action=submit&title=San_Francisco',
+        'http://wikitravel.org/en/index.php?action=submit&title=San_Francisco',
         '... and convert the filename to the URL?');
 
 # test the Wikipedia defaults with host
@@ -140,7 +141,7 @@ is($mvs->language_code, 'ru', '... and get back the string we changed it to');
 
 # test the space_substitute accessor
 $mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
-is($mvs->space_substitute, '+', 'Does the default space substitute get set?');
+is($mvs->space_substitute, '_', 'Does the default space substitute get set?');
 ok($mvs->space_substitute('-'), '... and can we change it');
 is($mvs->space_substitute, '-', '... and get back the string we changed it to');
 eval { $mvs->space_substitute('&') };
@@ -173,7 +174,7 @@ is($mvs->password, 'joeuser', '... and get back the string we changed it to');
 
 # test the wiki_path accessor
 $mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
-is($mvs->wiki_path, 'wiki/wiki.phtml', 'Does the default wiki path get set?');
+is($mvs->wiki_path, 'wiki/index.php', 'Does the default wiki path get set?');
 ok($mvs->wiki_path('foo/index.php'), '... and can we change it');
 is($mvs->wiki_path, 'foo/index.php', '... and get back the string we changed it to');
 $mvs->wiki_path('/foo/index.php');
@@ -240,19 +241,19 @@ isa_ok($@, 'WWW::Mediawiki::Client::AbsoluteFileNameException',
 # test pagename_to_url
 $mvs = WWW::Mediawiki::Client->new(host => 'www.wikifoo.org');
 is($mvs->pagename_to_url('San Francisco', 'edit'),
-        'http://www.wikifoo.org/wiki/wiki.phtml?action=edit&title=San+Francisco',
+        'http://www.wikifoo.org/wiki/index.php?action=edit&title=San_Francisco',
         'Can we convert a pagename to a URL?');
 #  ... with __LANG__ token in path
 ok($mvs->wiki_path('wiki/__LANG__/wiki.phtml'), 
         '... and can add __LANG__ to wiki_path');
 is($mvs->pagename_to_url('San Francisco', 'edit'),
-        'http://www.wikifoo.org/wiki/en/wiki.phtml?action=edit&title=San+Francisco',
+        'http://www.wikifoo.org/wiki/en/wiki.phtml?action=edit&title=San_Francisco',
         '... which gives us the right URL');
 # ... with __LANG__ token in base url
 ok($mvs->host('__LANG__.wikifoo.org'),
         '... and can add __LANG__ to host');
 is($mvs->pagename_to_url('San Francisco', 'edit'),
-        'http://en.wikifoo.org/wiki/en/wiki.phtml?action=edit&title=San+Francisco',
+        'http://en.wikifoo.org/wiki/en/wiki.phtml?action=edit&title=San_Francisco',
         '... which gives us the right URL');
 
 # test filename_to_pagename

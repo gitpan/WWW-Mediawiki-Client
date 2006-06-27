@@ -15,7 +15,7 @@ our (
 	$opt_help, $opt_verbose, $opt_defaults,
 	$opt_host, $opt_lang, $opt_username, $opt_password, 
         $opt_version, $opt_wiki_path, $opt_space_sub,
-	$opt_message, $opt_watch, $opt_minor,
+	$opt_message, $opt_watch, $opt_minor, $opt_tls
 );
 $opt_verbose = 0;
 
@@ -62,6 +62,7 @@ sub main {
         pod2usage(-verbose => 1);
     }
     $wmc->host($opt_host) if $opt_host;
+    $wmc->protocol('https') if $opt_tls;
     $wmc->commit_message($opt_message) if $opt_message;
     $wmc->language_code($opt_lang) if $opt_lang;
     $wmc->username($opt_username) if $opt_username;
@@ -175,6 +176,7 @@ sub parse_options {
 	my @addit;
 	@addit = (
 		'host|d=s'	=> \$opt_host,
+                'use_tls|T'     => \$opt_tls,
 		'lang|l=s'	=> \$opt_lang,
 		'username|u=s'	=> \$opt_username,
 		'password|p=s'	=> \$opt_password,
@@ -227,7 +229,7 @@ mvs - A command line Mediawiki client
   mkdir wikistuff
   cd wikistuff
 
-  mvs [-q|-v] login [-d <wikihost>] [-l language_code ] [-u <username>] [-p <password> ] [-w <wiki_path>] 
+  mvs [-q|-v] login [-T] [-d <wikihost>] [-l language_code ] [-u <username>] [-p <password> ] [-w <wiki_path>] 
 
   mvs [-q|-v] update [<file> ..]
   mvs [-q|-v] up [<file> ..]

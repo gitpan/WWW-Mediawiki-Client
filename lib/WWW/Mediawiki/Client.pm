@@ -84,7 +84,7 @@ use constant TITLE => 'title';
 
 use constant SUBMIT => 'submit';
 
-use constant LOGIN => 'submit';
+use constant LOGIN => 'submitlogin';
 
 use constant LOGIN_TITLE => 'Special:Userlogin';
 
@@ -95,50 +95,56 @@ my %DEFAULTS;
 
 $DEFAULTS{'www.wikitravel.org'} =
     {
-        'host'          => 'www.wikitravel.org',
+        'host'              => 'wikitravel.org',
+        'protocol'          => 'http',
         'space_substitute'  => '_',
-        'wiki_path'      => 'wiki/__LANG__/index.php',
+        'wiki_path'         => 'wiki/__LANG__/index.php',
     };
 $DEFAULTS{'wikitravel.org'} = $DEFAULTS{'www.wikitravel.org'};
 
 $DEFAULTS{'www.wikipedia.org'} =
     {
-        'host'          => '__LANG__.wikipedia.org',
+        'host'              => '__LANG__.wikipedia.org',
+        'protocol'          => 'http',
         'space_substitute'  => '+',
-        'wiki_path'      => 'w/wiki.phtml',
+        'wiki_path'         => 'w/wiki.phtml',
     };
 $DEFAULTS{'wikipedia.org'} = $DEFAULTS{'www.wikipedia.org'};
 
 $DEFAULTS{'www.wiktionary.org'} = 
     {
-        'host'          => '__LANG__.wiktionary.org',
+        'host'              => '__LANG__.wiktionary.org',
+        'protocol'          => 'http',
         'space_substitute'  => '_',
-        'wiki_path'      => 'w/wiki.phtml',
+        'wiki_path'         => 'w/wiki.phtml',
     };
 $DEFAULTS{'wiktionary.org'} = $DEFAULTS{'www.wiktionary.org'};
 
 $DEFAULTS{'www.wikibooks.org'} = 
     {
-        'host'          => '__LANG__.wikibooks.org',
+        'host'              => '__LANG__.wikibooks.org',
+        'protocol'          => 'http',
         'space_substitute'  => '_',
-        'wiki_path'      => 'w/wiki.phtml',
+        'wiki_path'         => 'w/wiki.phtml',
     };
 $DEFAULTS{'wikibooks.org'} = $DEFAULTS{'www.wikibooks.org'};
 
 sub DEFAULTS { \%DEFAULTS };
 
-use constant SPACE_SUBSTITUTE => '+';
-use constant WIKI_PATH => 'wiki/wiki.phtml';
+use constant SPACE_SUBSTITUTE => '_';
+use constant WIKI_PATH => 'wiki/index.php';
 use constant LANGUAGE_CODE => 'en';
+use constant PROTOCOL => 'http';
 
 use constant SPECIAL_EXPORT => 'Special:Export';
 use constant SPECIAL_VERSION => 'Special:Version';
+
 
 =head3 $VERSION 
 
 =cut 
 
-our $VERSION = 0.28;
+our $VERSION = 0.29;
 
 =head2 Update Status
 
@@ -292,8 +298,8 @@ Controls which attributes get saved out to the config file.
 use constant CONFIG_FILE => '.mediawiki';
 use constant COOKIE_FILE => '.mediawiki_cookies.dat';
 use constant SAVED_ATTRIBUTES => (
-    qw(site_url host language_code space_substitute username password 
-       wiki_path watch encoding minor_edit escape_filenames)
+    qw(site_url host protocol language_code space_substitute username
+       password wiki_path watch encoding minor_edit escape_filenames)
 );  # It's important that host goes first since it has side effects
 
 
@@ -321,6 +327,7 @@ sub new {
         $self->$attr($init{$attr});
     }
     $self->{ua} = LWP::UserAgent->new();
+    push @{ $self->{ua}->requests_redirectable }, 'POST';
     my $agent = 'WWW::Mediawiki::Client/' . $VERSION;
     $self->{ua}->agent($agent);
     $self->{ua}->env_proxy;
@@ -376,6 +383,42 @@ sub host {
         }
     }
     return $self->{host};
+}
+
+=head2 protocol
+
+  my $url = $mvs->protocol('www.wikipediea.org');
+
+  my $url = $mvs->protocol('www.wikitravel.org');
+
+The C<protocol> is the protocol used by the Mediawiki server from which you
+want to obtain content, and to which your submissions will be made.  It can
+be one of C<http> or C<https> with the default value being http.
+
+B<Side Effects:>
+
+=over 4
+
+=item Server defaults
+
+If WWW::Mediawiki::Client knows about the settings for the Mediawiki
+installation you are trying to use then the various path fields will also
+be set as a side-effect.
+
+=back
+
+=cut
+
+sub protocol {
+    my ($self, $protocol) = @_;
+    if ($protocol) {
+        WWW::Mediawiki::Client::URLConstructionException->throw(
+                "The protocol must be either 'http' or 'https'."
+                . "You specified $protocol." )
+            unless $protocol =~ m/^http(s){0,1}$/;
+        $self->{protocol} = $protocol;
+    } 
+    return $self->{protocol} || PROTOCOL;
 }
 
 =head2 language_code
@@ -719,9 +762,10 @@ sub site_url {
     my ($pkg, $caller, $line) = caller;
     warn "Using depricated method 'site_url' at $caller line $line."
             unless $pkg =~ "WWW::Mediawiki::Client";
-    $host =~ s{^http://}{} if $host;
+    my $protocol = $self->protocol;
+    $host =~ s{^$protocol://}{} if $host;
     $host = $self->host($host);
-    return "http://" . $host if $host;
+    return "$protocol://" . $host if $host;
 }
 
 =head1 Instance Methods
@@ -770,7 +814,8 @@ sub do_login {
     my $lang = $self->language_code;
     $host =~ s/__LANG__/$lang/;
     $path =~ s/__LANG__/$lang/;
-    my $url = "http://$host/$path"
+    my $protocol = $self->protocol;
+    my $url = "$protocol://$host/$path"
             . "?" . ACTION . "=" . LOGIN
             . "&" . TITLE  . "=" . LOGIN_TITLE;
     $self->{ua}->cookie_jar->clear;
@@ -1194,7 +1239,7 @@ sub get_server_page {
     $self->{edit}->{def_minor} = $self->_get_edit_minor_default($doc);
     my $headline = Encode::encode("utf8", $self->_get_page_headline($doc));
     my $expected = lc $pagename;
-    unless (lc($headline) =~ /$expected$/) {
+    unless (lc($headline) =~ /\Q$expected\E$/) {
         WWW::Mediawiki::Client::ServerPageException->throw(
 	        error => "The server could not resolve the page name
                         '$pagename', but responded that it was '$headline'.",
@@ -1278,7 +1323,8 @@ sub pagename_to_url {
     $host =~ s/__LANG__/$lang/g;
     my $wiki_path = $self->wiki_path;
     $wiki_path =~ s/__LANG__/$lang/g;
-    return "http://$host/$wiki_path?" . ACTION . "=$action&" . TITLE . "=$name";
+    my $protocol = $self->protocol;
+    return "$protocol://$host/$wiki_path?" . ACTION . "=$action&" . TITLE . "=$name";
 }
 
 =head2 filename_to_pagename
@@ -1399,10 +1445,16 @@ sub list_wiki_files {
 
 sub _merge {
     my ($self, $filename, $ref, $server, $local) = @_;
+    my $control = {
+            in => $\,
+            out => $/,
+            chomp => 1
+        };
     $ref = VCS::Lite->new('ref', "\n", "$ref\n");
     $server = VCS::Lite->new('server', "\n", "$server\n");
     $local = VCS::Lite->new('local', "\n", "$local\n");
-    return scalar $ref->merge($server, $local)->text("\n");
+    my $merge = $ref->merge($server, $local);
+    return scalar $merge->text();
 }
 
 sub _get_wiki_text {
@@ -1543,15 +1595,15 @@ sub _conflicts_found_in {
 
 sub _get_update_status {
     my ($self, $rv, $sv, $lv, $nv) = @_;
-    chomp ($rv, $sv, $lv, $nv);
-    my $status = STATUS_UNKNOWN;
-    return $status unless $sv || $lv;
-    $status = STATUS_UNCHANGED if $sv eq $lv;
-    $status = STATUS_LOCAL_MODIFIED if $lv ne $rv;
-    $status = STATUS_SERVER_MODIFIED if $sv && $rv ne $sv;
-    $status = STATUS_LOCAL_ADDED unless $sv;
-    $status = STATUS_CONFLICT if $self->_conflicts_found_in($nv);
-    return $status;
+    chomp ($rv, $sv, $lv, $nv); # double chomp
+    chomp ($rv, $sv, $lv, $nv); # it's a nasty hack, but necessary until we re-write
+    return STATUS_CONFLICT if $self->_conflicts_found_in($nv);
+    return STATUS_UNKNOWN unless $sv or $lv;
+    return STATUS_LOCAL_ADDED unless $sv;
+    return STATUS_UNCHANGED if $sv eq $lv;
+    return STATUS_LOCAL_MODIFIED if $lv ne $rv;
+    return STATUS_SERVER_MODIFIED if $rv ne $sv;
+    return STATUS_UNKNOWN;
 }
 
 sub _get_host_url {
@@ -1559,7 +1611,8 @@ sub _get_host_url {
 	my $lang = $self->language_code;
 	my $host = $self->host;
 	$host =~ s/__LANG__/$lang/g;
-	return "http://$host/";
+        my $protocol = $self->protocol;
+	return "$protocol://$host/";
 }
 
 sub _get_version_url {
@@ -1784,7 +1837,7 @@ lacking UTF-8 support.
 
 =head1 LICENSE
 
-Copyright (c) 2004-2005 Mark Jaroski. 
+Copyright (c) 2004-2006 Mark Jaroski. 
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
