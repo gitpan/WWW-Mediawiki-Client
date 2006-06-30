@@ -6,7 +6,6 @@ Makefile.PL
 README
 t/client.t
 t/exceptions.t
-t/files/.mediawiki
 t/files/example.mediawiki
 t/files/local.wiki
 t/files/Main_Page.html

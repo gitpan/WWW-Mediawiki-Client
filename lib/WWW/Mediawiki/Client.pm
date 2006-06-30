@@ -144,7 +144,7 @@ use constant SPECIAL_VERSION => 'Special:Version';
 
 =cut 
 
-our $VERSION = 0.29;
+our $VERSION = 0.30;
 
 =head2 Update Status
 
