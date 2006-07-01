@@ -104,10 +104,10 @@ unlink $conf_file;
 
 # test the Wikitravel defaults with new
 $mvs = WWW::Mediawiki::Client->new(host => 'wikitravel.org');
-is($mvs->wiki_path, '__LANG__/index.php', 'Wikitravel defaults: wiki_path');
+is($mvs->wiki_path, 'wiki/__LANG__/index.php', 'Wikitravel defaults: wiki_path');
 is($mvs->space_substitute, '_', 'Wikitravel defaults: space_substitute');
 is($mvs->pagename_to_url('San Francisco', 'submit'),
-        'http://wikitravel.org/en/index.php?action=submit&title=San_Francisco',
+        'http://wikitravel.org/wiki/en/index.php?action=submit&title=San_Francisco',
         '... and convert the filename to the URL?');
 
 # test the Wikipedia defaults with new
@@ -120,10 +120,10 @@ is($mvs->pagename_to_url('San Francisco', 'submit'),
 
 # test the Wikitravel defaults with host
 ok($mvs->host('wikitravel.org'), 'Can change host to wikitravel');
-is($mvs->wiki_path, '__LANG__/index.php', '... and get the right wiki_path');
+is($mvs->wiki_path, 'wiki/__LANG__/index.php', '... and get the right wiki_path');
 is($mvs->space_substitute, '_', '... and get the right space_substitute');
 is($mvs->pagename_to_url('San Francisco', 'submit'),
-        'http://wikitravel.org/en/index.php?action=submit&title=San_Francisco',
+        'http://wikitravel.org/wiki/en/index.php?action=submit&title=San_Francisco',
         '... and convert the filename to the URL?');
 
 # test the Wikipedia defaults with host
