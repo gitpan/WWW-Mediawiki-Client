@@ -7,7 +7,7 @@ WriteMakefile(
     PREREQ_PM       => 
         { 
             'Test::Differences'=> 0,
-            'VCS::Lite' => 0,
+            'VCS::Lite' => 0.08,
             'Getopt::Std'=> 0,
             'Pod::Usage' => 0,
             'File::Spec' => 0,
